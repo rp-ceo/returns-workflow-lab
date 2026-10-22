@@ -1,132 +1,26 @@
 "use strict";
-const byId = (id) => document.getElementById(id);
-let state = { runs: [], samples: [] };
+const byId = id => document.getElementById(id);
+let state = {runs:[],samples:[]};
 let selectedId = null;
 let filter = "all";
-const titles = {
-  return_instructions_draft: "Return instructions prepared",
-  tracking_update_draft: "Tracking update prepared",
-  order_reference_request_draft: "Ask for the order reference",
-  human_review: "A person needs to review this"
-};
-function node(tag, text, className) {
-  const element = document.createElement(tag);
-  if (text !== undefined) element.textContent = text;
-  if (className) element.className = className;
-  return element;
-}
-async function api(path, body) {
-  const response = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "The request could not be processed.");
-  return result;
-}
-function feedback(text, error = false) {
-  byId("feedback").textContent = text;
-  byId("feedback").className = error ? "error" : "";
-}
-function key(run) { return run.mode + ":" + run.ticket_id; }
-function selectSample(index) {
-  const sample = state.samples[index];
-  byId("ticket-id").value = sample ? sample.ticket_id : "CUSTOM-" + Date.now();
-  byId("email").value = sample ? sample.sender_email : "alex@example.com";
-  byId("order-id").value = sample && sample.order_id ? sample.order_id : "";
-  byId("message").value = sample ? sample.message : "";
-}
-function render() {
-  const runs = state.runs;
-  byId("total-count").textContent = runs.length;
-  byId("draft-count").textContent = runs.filter(r => r.route !== "human_review").length;
-  byId("review-count").textContent = runs.filter(r => r.route === "human_review").length;
-  byId("live-count").textContent = runs.filter(r => r.mode === "live" && r.extraction).length;
-  byId("run-list").replaceChildren();
-  const visible = runs.filter(r => filter === "all" || (filter === "review" ? r.route === "human_review" : r.route !== "human_review"));
-  for (const run of visible) {
-    const row = node("button", undefined, "run-row" + (key(run) === selectedId ? " selected" : ""));
-    row.type = "button";
-    const label = node("div");
-    label.append(node("strong", run.ticket_id), node("small", run.ticket.message));
-    row.append(label, node("span", run.route === "human_review" ? "Review" : "Draft ready", "route-pill" + (run.route === "human_review" ? " review" : "")));
-    row.addEventListener("click", () => { selectedId = key(run); render(); });
-    byId("run-list").append(row);
-  }
-  if (runs.length && !visible.length) byId("run-list").append(node("p", "No requests in this view.", "hint"));
-  const run = runs.find(r => key(r) === selectedId);
-  byId("empty").hidden = Boolean(run);
-  byId("detail").hidden = !run;
-  if (!run) return;
-  byId("detail-id").textContent = run.ticket_id;
-  byId("detail-route").textContent = titles[run.route] || run.route;
-  byId("detail-mode").textContent = run.mode === "demo" ? "OFFLINE RULES" : "LIVE AI";
-  byId("reason").textContent = run.reason;
-  byId("original-message").textContent = run.ticket.message;
-  byId("intent").textContent = run.extraction ? "Intent: " + run.extraction.category.replaceAll("_", " ") + " · Evidence: “" + run.extraction.evidence + "” · Confidence score: " + run.extraction.confidence : "No model extraction used for this outcome.";
-  byId("checks").replaceChildren();
-  byId("checks-section").hidden = !run.checks.length;
-  for (const check of run.checks) {
-    const row = node("div", undefined, "check" + (check.passed ? "" : " failed"));
-    const text = node("div", check.label);
-    text.append(node("small", check.detail));
-    row.append(node("span", check.passed ? "✓" : "!", "check-icon"), text);
-    byId("checks").append(row);
-  }
-  byId("draft-section").hidden = !run.draft;
-  byId("draft").textContent = run.draft || "";
-  byId("trace").replaceChildren();
-  for (const step of run.trace) {
-    const item = node("li");
-    item.append(node("strong", step.step), node("small", step.detail));
-    byId("trace").append(item);
-  }
-  byId("run-meta").textContent = "Saved " + new Date(run.created_at).toLocaleString() + " · " + run.duration_ms + " ms · " + run.classifier + ".";
-}
-async function refresh() {
-  state = await api("/api/state");
-  byId("live-option").disabled = !state.live_available;
-  byId("integration-status").textContent = state.order_source || "LOCAL FIXTURES";
-  render();
-}
-byId("ticket-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  byId("process").disabled = true;
-  feedback(byId("mode").value === "live" ? "Calling the model and checking the result…" : "Checking the request…");
-  const ticket = { ticket_id: byId("ticket-id").value, sender_email: byId("email").value, message: byId("message").value };
-  if (byId("order-id").value.trim()) ticket.order_id = byId("order-id").value.trim();
-  try {
-    const run = await api("/api/process", { mode: byId("mode").value, ticket });
-    selectedId = key(run);
-    await refresh();
-    feedback(run.replayed ? "Existing result returned. The duplicate was not processed again." : "Saved. Inspect the checks and draft on the right.");
-  } catch (error) { feedback(error.message, true); }
-  finally { byId("process").disabled = false; }
-});
-byId("run-demo").addEventListener("click", async () => {
-  byId("run-demo").disabled = true;
-  try {
-    const batch = await api("/api/demo", { mode: "demo" });
-    selectedId = key(batch.results[0]);
-    await refresh();
-    feedback("14 synthetic scenarios loaded. This batch used rules, not an AI model.");
-  } catch (error) { feedback(error.message, true); }
-  finally { byId("run-demo").disabled = false; }
-});
-byId("sample").addEventListener("change", () => selectSample(byId("sample").value));
-byId("mode").addEventListener("change", () => {
-  byId("mode-hint").textContent = byId("mode").value === "live" ? "Submits this message to OpenAI using the server's API key. Use synthetic data only. Results still need policy checks." : "Offline mode demonstrates the workflow. Live AI is a separate, optional mode.";
-});
-for (const button of document.querySelectorAll(".filter")) {
-  button.addEventListener("click", () => {
-    filter = button.dataset.filter;
-    document.querySelectorAll(".filter").forEach(b => b.classList.toggle("active", b === button));
-    render();
-  });
-}
-refresh().then(() => {
-  state.samples.forEach((sample, index) => {
-    const option = node("option", sample.ticket_id + " · " + sample.message.slice(0, 55));
-    option.value = index;
-    byId("sample").append(option);
-  });
-  byId("sample").value = "0";
-  selectSample(0);
-}).catch(error => feedback(error.message, true));
+let view = "queue";
+const key = run => run.mode + ":" + run.ticket_id;
+const stateLabel = {needs_review:"Needs review",draft_ready:"Draft ready",approved:"Approved",reviewed:"Reviewed"};
+const title = {return_instructions_draft:"Return request",tracking_update_draft:"Delivery question",order_reference_request_draft:"Missing order reference",human_review:"Exception review"};
+const node = (tag,text,className) => {const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(className)e.className=className;return e;};
+function pill(text,kind){return node("span",text,"pill "+(kind||""));}
+async function api(path,body){const r=await fetch(path,body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const result=await r.json();if(!r.ok)throw new Error(result.error||"Request failed.");return result;}
+function feedback(text,error=false){const e=byId("feedback");e.hidden=!text;e.textContent=text;e.className="notification"+(error?" error":"");}
+function statusOf(run){return run.review?.state||(run.route==="human_review"?"needs_review":"draft_ready");}
+function matches(run){const status=statusOf(run);return filter==="all"||(filter==="done"?["approved","reviewed"].includes(status):status===filter);}
+function tone(status){return status==="needs_review"?"amber":status==="draft_ready"?"blue":"green";}
+function setView(next){view=next;for(const id of ["queue","workflow","checks"])byId(id+"-view").hidden=id!==next;document.querySelectorAll(".nav-item").forEach(b=>b.classList.toggle("active",b.dataset.view===next));const labels={queue:["Inbox","Returns inbox","Review exceptions and approve prepared responses."],workflow:["Automation","Automation workflow","Inspect the orchestration, integrations and saved execution receipts."],checks:["Evidence","Checks & evidence","Inspect the saved test run and the fictional merchant policy."]};byId("view-label").textContent=labels[next][0];byId("page-title").textContent=labels[next][1];byId("page-subtitle").textContent=labels[next][2];}
+function setFilter(next){filter=next;document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.status===next));setView("queue");render();}
+function render(){const runs=state.runs;byId("nav-count").textContent=runs.length;byId("review-count").textContent=runs.filter(r=>statusOf(r)==="needs_review").length;byId("draft-count").textContent=runs.filter(r=>statusOf(r)==="draft_ready").length;byId("done-count").textContent=runs.filter(r=>["approved","reviewed"].includes(statusOf(r))).length;byId("n8n-count").textContent=runs.filter(r=>r.dispatch?.source==="n8n").length;const search=byId("search").value.toLowerCase();const visible=runs.filter(r=>matches(r)&&[r.ticket_id,r.ticket.message,r.order?.order_id||r.extraction?.order_id||""].join(" ").toLowerCase().includes(search));byId("case-rows").replaceChildren();byId("queue-empty").hidden=visible.length>0;byId("queue-size").textContent=visible.length+" of "+runs.length+" cases";for(const run of visible){const tr=node("tr",undefined,key(run)===selectedId?"selected":"");tr.tabIndex=0;tr.dataset.key=key(run);tr.setAttribute("aria-label",run.ticket_id+", "+stateLabel[statusOf(run)]);const first=node("td");first.append(node("strong",run.ticket_id),node("small",run.ticket.message));const order=node("td",run.order?.order_id||run.extraction?.order_id||"-" );const status=node("td");status.append(pill(stateLabel[statusOf(run)],tone(statusOf(run))));const source=node("td");source.append(node("span",run.dispatch?"n8n":run.mode==="live"?"Live AI":"Baseline","source"+(run.dispatch?" n8n":"")));tr.append(first,order,status,source);tr.addEventListener("click",()=>{selectedId=key(run);renderDetail();renderRowsOnly();});tr.addEventListener("keydown",e=>{if(e.key==="Enter"){selectedId=key(run);render();}});byId("case-rows").append(tr);}renderDetail();renderEvidence();}
+function renderRowsOnly(){for(const row of byId("case-rows").children){row.classList.toggle("selected",row.dataset.key===selectedId);}}
+function renderDetail(){const run=state.runs.find(r=>key(r)===selectedId);byId("no-selection").hidden=Boolean(run);byId("case-detail").hidden=!run;if(!run)return;const status=statusOf(run);byId("case-id").textContent=run.ticket_id;byId("case-title").textContent=title[run.route]||run.route;byId("case-state").textContent=stateLabel[status];byId("case-state").className="pill "+tone(status);byId("case-meta").textContent=run.ticket.sender_email+" / "+(run.mode==="live"?"Live model":"Rule baseline")+(run.dispatch?" / Routed by n8n":"");byId("original-message").textContent=run.ticket.message;byId("intent-evidence").textContent=run.extraction?"Intent: "+run.extraction.category.replaceAll("_"," ")+". Evidence: \""+run.extraction.evidence+"\"":"No validated extraction. Inspect the failure before proceeding.";byId("order-facts").replaceChildren();byId("order-facts").hidden=!run.order;if(run.order){for(const [label,value] of [["Order",run.order.order_id],["Value","EUR "+run.order.total_eur],["Country",run.order.country]]){const e=node("div");e.append(node("small",label),node("strong",value));byId("order-facts").append(e);}}byId("checks").replaceChildren();for(const c of run.checks){const e=node("div",undefined,"check-row"+(c.passed?"":" fail"));e.title=c.detail;e.append(node("span",undefined,"check-dot"),node("span",c.label));byId("checks").append(e);}byId("check-summary").textContent=run.checks.filter(c=>c.passed).length+" / "+run.checks.length+" passed";byId("reason").textContent=run.reason;byId("response-section").hidden=!run.draft;byId("draft-text").value=run.review?.draft||run.draft||"";byId("review-note").value=run.review?.note||"";byId("approve-draft").hidden=!run.draft||run.route==="human_review";byId("mark-reviewed").hidden=run.route!=="human_review";byId("review-state-note").textContent=status==="approved"?"Draft approved for sending. No customer message has been sent.":status==="reviewed"?"Review recorded. Any merchant or customer action still happens outside this prototype.":"Record a decision with context. No refund or message is sent by this desk.";byId("activity").replaceChildren();for(const step of run.trace){const li=node("li");li.append(node("strong",step.step),node("small",step.detail));byId("activity").append(li);}for(const event of run.activity||[]){const li=node("li");li.append(node("strong",event.kind==="dispatch"?"n8n queue hand-off":event.action.replaceAll("_"," ")),node("small",event.detail+" / "+new Date(event.created_at).toLocaleString()));byId("activity").append(li);}byId("model-data").textContent=JSON.stringify({model:run.model,extraction:run.extraction,provider_usage:run.provider_usage,processing_ms:run.duration_ms,review_revision:run.review?.revision||0},null,2);}
+function renderEvidence(){const e=state.evaluation;byId("evaluation-model").textContent=e?.model||"Not run";byId("evaluation-summary").replaceChildren();if(e){for(const [number,label] of [[e.route_matches+" / "+e.case_count,"Expected routes matched"],[e.validated_live_extractions,"Validated model extractions"],[e.review_required_but_drafted,"Review cases given a draft"]]){const d=node("div");d.append(node("strong",number),node("small",label));byId("evaluation-summary").append(d);}}byId("evaluation-rows").replaceChildren();for(const c of e?.cases||[]){const tr=node("tr");tr.append(node("td",c.id),node("td",c.expected_route.replaceAll("_"," ")),node("td",c.actual_route.replaceAll("_"," ")));const result=node("td");result.append(pill(c.matched?"Matched":"Mismatch",c.matched?"green":"amber"));tr.append(result);byId("evaluation-rows").append(tr);}byId("policy-details").replaceChildren();const p=state.policy||{};for(const [label,value] of [["Return window",p.return_window_days+" days"],["Manual review above","EUR "+p.manual_review_above_eur],["Countries",(p.supported_countries||[]).join(", ")],["Reference date",p.reference_date]]){const d=node("div");d.append(node("dt",label),node("dd",value));byId("policy-details").append(d);}byId("orchestration-evidence").replaceChildren();if(!state.orchestration){byId("orchestration-evidence").append(node("p","No verified n8n execution receipt saved yet."));}else{for(const run of state.orchestration.runs||[]){const d=node("div",undefined,"receipt");d.append(node("strong",run.ticket_id+" / "+run.destination),node("small",run.status+" / n8n "+state.orchestration.n8n_version));byId("orchestration-evidence").append(d);}}}
+async function refresh(){state=await api("/api/state");if(!selectedId&&state.runs.length)selectedId=key(state.runs[0]);byId("live-option").disabled=!state.live_available;if(!state.live_available)byId("mode").value="demo";render();}
+function loadSample(index){const sample=state.samples[index];byId("ticket-id").value="CASE-"+Date.now();byId("email").value=sample?.sender_email||"alex@example.com";byId("order-id").value=sample?.order_id||"";byId("message").value=sample?.message||"";}
+async function review(action){const run=state.runs.find(r=>key(r)===selectedId);if(!run)return;const note=byId("review-note").value;if(action!=="approve_draft"&&!note.trim()){feedback("Add a note describing the next step.",true);byId("review-note").focus();return;}try{await api("/api/review",{event_id:crypto.randomUUID(),ticket_id:run.ticket_id,mode:run.mode,action,note,draft:byId("draft-text").value||null,expected_revision:run.review?.revision||0});await refresh();feedback(action==="approve_draft"?"Draft approved. No message sent.":"Operator decision recorded.");}catch(error){feedback(error.message,true);}}
+for(const b of document.querySelectorAll("[data-view]"))b.addEventListener("click",()=>setView(b.dataset.view));for(const b of document.querySelectorAll("[data-status]"))b.addEventListener("click",()=>setFilter(b.dataset.status));byId("search").addEventListener("input",render);byId("refresh").addEventListener("click",()=>refresh().then(()=>feedback("Queue refreshed.")).catch(e=>feedback(e.message,true)));byId("approve-draft").addEventListener("click",()=>review("approve_draft"));byId("mark-reviewed").addEventListener("click",()=>review("mark_reviewed"));byId("hold-case").addEventListener("click",()=>review("hold"));byId("new-request").addEventListener("click",()=>{loadSample(byId("sample").value);byId("request-feedback").textContent="";byId("request-dialog").showModal();});for(const id of ["close-dialog","cancel-request"])byId(id).addEventListener("click",()=>byId("request-dialog").close());byId("sample").addEventListener("change",()=>loadSample(byId("sample").value));byId("mode").addEventListener("change",()=>{byId("mode-hint").textContent=byId("mode").value==="live"?"One small paid model call per new ticket. Only message text goes to OpenAI.":"Keyword-based baseline. No AI model runs in this mode.";});byId("ticket-form").addEventListener("submit",async event=>{event.preventDefault();byId("process").disabled=true;byId("request-feedback").textContent="Processing request...";const ticket={ticket_id:byId("ticket-id").value,sender_email:byId("email").value,message:byId("message").value};if(byId("order-id").value.trim())ticket.order_id=byId("order-id").value.trim();try{const run=await api("/api/process",{mode:byId("mode").value,ticket});selectedId=key(run);filter="all";await refresh();setFilter("all");byId("request-dialog").close();feedback(run.replayed?"Saved result returned. No repeat model call.":"Case processed. Review the decision and next action.");}catch(error){byId("request-feedback").textContent=error.message;}finally{byId("process").disabled=false;}});byId("load-scenarios").addEventListener("click",async()=>{byId("load-scenarios").disabled=true;try{await api("/api/demo",{mode:"demo"});await refresh();feedback("14 baseline cases loaded using rules, without AI calls.");}catch(error){feedback(error.message,true);}finally{byId("load-scenarios").disabled=false;}});refresh().then(()=>{state.samples.forEach((s,i)=>{const option=node("option",s.ticket_id+" - "+s.message.slice(0,55));option.value=i;byId("sample").append(option);});byId("sample").value="0";}).catch(error=>feedback(error.message,true));
