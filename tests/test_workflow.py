@@ -88,6 +88,29 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("unclassified", result["reason"])
         self.assertNotIn("do-not-echo", result["reason"])
 
+    def test_completed_provider_payload_is_validated_and_policy_still_runs(self):
+        extraction = rule_extract(self.ticket)
+        body = {"status": "completed", "output": [{"type": "message", "content": [
+            {"type": "output_text", "text": json.dumps(extraction)}]}]}
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder", "OPENAI_MODEL": "gpt-6-luna"}), \
+                patch("workflow.urllib.request.urlopen", return_value=io.BytesIO(json.dumps(body).encode())) as provider:
+            result = process_ticket(self.ticket, "live")
+        self.assertEqual(result["route"], "return_instructions_draft")
+        self.assertTrue(result["checks"])
+        sent = json.loads(provider.call_args[0][0].data)
+        self.assertEqual(sent["reasoning"], {"effort": "none"})
+        self.assertFalse(sent["store"])
+        self.assertNotIn(self.ticket["sender_email"], sent["input"])
+
+    def test_incomplete_provider_response_never_becomes_a_draft(self):
+        body = {"status": "incomplete", "output": []}
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder"}), \
+                patch("workflow.urllib.request.urlopen", return_value=io.BytesIO(json.dumps(body).encode())):
+            result = process_ticket(self.ticket, "live")
+        self.assertEqual(result["route"], "human_review")
+        self.assertIsNone(result["extraction"])
+        self.assertIsNone(result["draft"])
+
     def test_invalid_scores_are_rejected(self):
         for score in (True, float("nan"), 2, -1):
             with self.subTest(score=score):
