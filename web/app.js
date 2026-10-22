@@ -38,7 +38,7 @@ function render() {
   byId("total-count").textContent = runs.length;
   byId("draft-count").textContent = runs.filter(r => r.route !== "human_review").length;
   byId("review-count").textContent = runs.filter(r => r.route === "human_review").length;
-  byId("live-count").textContent = runs.filter(r => r.mode === "live").length;
+  byId("live-count").textContent = runs.filter(r => r.mode === "live" && r.extraction).length;
   byId("run-list").replaceChildren();
   const visible = runs.filter(r => filter === "all" || (filter === "review" ? r.route === "human_review" : r.route !== "human_review"));
   for (const run of visible) {
@@ -83,6 +83,7 @@ function render() {
 async function refresh() {
   state = await api("/api/state");
   byId("live-option").disabled = !state.live_available;
+  byId("integration-status").textContent = state.order_source || "LOCAL FIXTURES";
   render();
 }
 byId("ticket-form").addEventListener("submit", async (event) => {
