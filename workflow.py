@@ -16,6 +16,7 @@ from settings import load_local_env
 load_local_env()
 
 ROOT = Path(__file__).resolve().parent
+DEFAULT_MODEL = "gpt-6-luna"
 CATEGORIES = ("return_request", "delivery_status", "damaged_item", "payment_problem", "other")
 ORDER_PATTERN = re.compile(r"\bORD-\d{4,8}\b", re.I)
 INJECTION = re.compile(r"ignore.{0,35}(instruction|rule|policy)|system prompt|bypass.{0,25}(policy|rule)", re.I)
@@ -119,7 +120,7 @@ def openai_extract(ticket):
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
         raise ValueError("Live mode requires OPENAI_API_KEY in the server environment.")
-    model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
     payload = {
         "model": model,
         "store": False,
@@ -136,6 +137,8 @@ def openai_extract(ticket):
         "input": json.dumps({"message": ticket["message"]}, ensure_ascii=False),
         "text": {"format": {"type": "json_schema", "name": "ticket_intent", "strict": True, "schema": EXTRACTION_SCHEMA}},
     }
+    if model == "gpt-6-luna":
+        payload["reasoning"] = {"effort": "none"}
     request = urllib.request.Request(
         "https://api.openai.com/v1/responses",
         data=json.dumps(payload).encode(),
@@ -187,7 +190,7 @@ def process_ticket(raw_ticket, mode="demo", extractor=None, policy=None, orders=
         "ticket": ticket,
         "mode": mode,
         "classifier": "offline rules (no LLM call)" if mode == "demo" else "OpenAI Responses API",
-        "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini") if mode == "live" else None,
+        "model": os.environ.get("OPENAI_MODEL", DEFAULT_MODEL) if mode == "live" else None,
         "reference_date": policy["reference_date"],
         "extraction": None,
         "order": None,
