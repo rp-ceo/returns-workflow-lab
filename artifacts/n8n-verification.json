@@ -1,0 +1,42 @@
+{
+  "n8n_version": "2.44.6",
+  "execution_mode": "local CLI",
+  "data": "fictional only",
+  "runs": [
+    {
+      "ticket_id": "N8N-RETURN-001",
+      "destination": "draft_approval",
+      "status": "success",
+      "workflow_id": "ReturnOpsLive001",
+      "receipt": "n8n-return-run.json",
+      "processing_replayed": false,
+      "dispatch_replayed": false,
+      "model": "gpt-6-luna"
+    },
+    {
+      "ticket_id": "N8N-REVIEW-001",
+      "destination": "exceptions",
+      "status": "success",
+      "workflow_id": "ReturnOpsLive002",
+      "receipt": "n8n-review-run.json",
+      "processing_replayed": false,
+      "dispatch_replayed": false,
+      "model": "gpt-6-luna"
+    },
+    {
+      "ticket_id": "N8N-RETURN-001",
+      "destination": "draft_approval",
+      "status": "replayed",
+      "workflow_id": "ReturnOpsLive001",
+      "receipt": "n8n-replay-run.json",
+      "processing_replayed": true,
+      "dispatch_replayed": true,
+      "model": "gpt-6-luna"
+    }
+  ],
+  "boundaries": [
+    "Manual test trigger, not a live helpdesk webhook.",
+    "n8n calls a Python service that performs extraction and order lookup.",
+    "Queue handoffs are saved local events; no customer messages or refunds are sent."
+  ]
+}
