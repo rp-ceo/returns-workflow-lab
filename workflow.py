@@ -116,7 +116,7 @@ def validate_extraction(result, ticket):
     return result
 
 
-def openai_extract(ticket):
+def openai_extract(ticket, metadata=None):
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
         raise ValueError("Live mode requires OPENAI_API_KEY in the server environment.")
@@ -164,6 +164,11 @@ def openai_extract(ticket):
         raise RuntimeError("Model provider returned HTTP " + str(error.code) + " (" + provider_code + "); check access, quota and model configuration.") from None
     except (urllib.error.URLError, TimeoutError):
         raise RuntimeError("Model provider could not be reached before the timeout.") from None
+    usage = body.get("usage")
+    if metadata is not None and isinstance(usage, dict):
+        counts = {name: usage.get(name) for name in ("input_tokens", "output_tokens", "total_tokens")}
+        if all(isinstance(value, int) and not isinstance(value, bool) and value >= 0 for value in counts.values()):
+            metadata["provider_usage"] = counts
     if body.get("status") != "completed":
         raise RuntimeError("Model response was incomplete; routed to review.")
     blocks = [c for item in body.get("output", []) if item.get("type") == "message" for c in item.get("content", [])]
@@ -172,8 +177,8 @@ def openai_extract(ticket):
     text = "".join(c.get("text", "") for c in blocks if c.get("type") == "output_text")
     try:
         result = validate_extraction(json.loads(text), ticket)
-    except (ValueError, TypeError):
-        raise RuntimeError("Model output failed validation; routed to review.") from None
+    except (ValueError, TypeError) as error:
+        raise RuntimeError("Model output failed validation: " + str(error) + "; routed to review.") from None
     return result
 
 
@@ -193,6 +198,8 @@ def process_ticket(raw_ticket, mode="demo", extractor=None, policy=None, orders=
         "model": os.environ.get("OPENAI_MODEL", DEFAULT_MODEL) if mode == "live" else None,
         "reference_date": policy["reference_date"],
         "extraction": None,
+        "classification_attempted": False,
+        "provider_usage": None,
         "order": None,
         "checks": [],
         "route": "human_review",
@@ -218,7 +225,13 @@ def process_ticket(raw_ticket, mode="demo", extractor=None, policy=None, orders=
         check("Instruction override check", False, "Possible request to bypass instructions or policy.")
         return done("human_review", "The message contains a possible instruction override; a person must review it.")
     try:
-        extraction = (extractor or (rule_extract if mode == "demo" else openai_extract))(ticket)
+        result["classification_attempted"] = True
+        if extractor:
+            extraction = extractor(ticket)
+        elif mode == "live":
+            extraction = openai_extract(ticket, metadata=result)
+        else:
+            extraction = rule_extract(ticket)
         extraction = validate_extraction(extraction, ticket)
         result["extraction"] = extraction
         result["trace"].append({"step": "Extract intent", "detail": extraction["category"] + " via " + result["classifier"]})
