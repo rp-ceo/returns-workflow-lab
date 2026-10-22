@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Returns Workflow Lab</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/" aria-label="Returns Workflow Lab home"><span class="mark">↳</span> RETURNS WORKFLOW LAB</a><span class="badge">INDEPENDENT PROTOTYPE</span></header>
+  <main>
+    <section class="intro"><div><p class="eyebrow">OPERATIONS / CUSTOMER SUPPORT</p><h1>A request comes in.<br>The next step is clear.</h1><p class="lede">Turn a return or delivery question into a checked response draft—or a clear task for a person.</p></div><div class="context"><span class="status-dot"></span><strong>Northline Demo Store</strong><p>Synthetic orders. Fictional policy.<br>Fixed reference date: 22 October 2026.</p><span class="quiet">No emails sent. No refunds issued.</span></div></section>
+    <div class="pipeline" aria-label="Workflow stages"><span><b>01</b> Receive request</span><i>→</i><span><b>02</b> Extract intent</span><i>→</i><span><b>03</b> Check order & policy</span><i>→</i><span><b>04</b> Draft or hand off</span></div>
+    <section class="metrics" aria-label="Run counts"><div><span>Processed requests</span><strong id="total-count">0</strong></div><div><span>Response drafts</span><strong id="draft-count">0</strong></div><div><span>Need human review</span><strong id="review-count">0</strong></div><div><span>Live AI runs</span><strong id="live-count">0</strong></div></section>
+    <div class="workspace">
+      <section class="panel request-panel"><div class="panel-heading"><div><p class="eyebrow">INPUT</p><h2>Try a request</h2></div><span class="small-label">01</span></div>
+        <form id="ticket-form">
+          <label for="mode">Classifier</label><select id="mode"><option value="demo">Offline demo · rules, no AI call</option><option id="live-option" value="live" disabled>Live AI · OpenAI API</option></select>
+          <p class="hint" id="mode-hint">Offline mode demonstrates the workflow. Live AI is a separate, optional mode.</p>
+          <label for="sample">Load a scenario</label><select id="sample"><option value="">Custom request</option></select>
+          <div class="form-row"><div><label for="ticket-id">Ticket ID</label><input id="ticket-id" required maxlength="80"></div><div><label for="order-id">Order ID <span class="optional">optional</span></label><input id="order-id" placeholder="ORD-1001" maxlength="20"></div></div>
+          <label for="email">Customer email</label><input id="email" type="email" required maxlength="254" autocomplete="off" value="alex@example.com">
+          <label for="message">Customer message</label><textarea id="message" rows="5" required maxlength="4000"></textarea>
+          <button class="primary" type="submit" id="process">Process request <span>↗</span></button>
+        </form>
+        <div class="batch-box"><strong>Explore the edge cases</strong><p>Run all 14 synthetic scenarios: normal returns, missing data, high-value orders, mismatched identities and more.</p><button class="secondary" id="run-demo">Run 14 demo scenarios</button></div>
+        <p id="feedback" role="status" aria-live="polite"></p>
+      </section>
+      <section class="panel results-panel"><div class="panel-heading"><div><p class="eyebrow">OUTPUT</p><h2>The decision desk</h2></div><span class="small-label">02</span></div>
+        <div class="filters" aria-label="Filter outcomes"><button class="filter active" data-filter="all">All requests</button><button class="filter" data-filter="draft">Drafts</button><button class="filter" data-filter="review">Human review</button></div>
+        <div id="run-list" class="run-list"></div>
+        <div id="empty" class="empty"><div class="empty-icon">↳</div><h3>See the reasoning, not just the answer.</h3><p>Process a request to inspect its extracted intent,<br>policy checks, response draft and execution trace.</p></div>
+        <article id="detail" hidden>
+          <div class="decision-head"><div><p class="eyebrow" id="detail-id"></p><h3 id="detail-route"></h3></div><span id="detail-mode" class="mode-tag"></span></div>
+          <p id="reason" class="reason"></p>
+          <div class="message-box"><p class="eyebrow">CUSTOMER REQUEST</p><p id="original-message"></p></div>
+          <div id="intent" class="intent"></div>
+          <section id="checks-section"><h4>Policy & data checks</h4><div id="checks"></div></section>
+          <section id="draft-section"><h4>Response draft</h4><div class="draft" id="draft"></div><p class="hint">Prepared for review. Nothing has been sent to the customer.</p></section>
+          <section><h4>Execution trace</h4><ol id="trace" class="trace"></ol></section>
+          <p class="hint" id="run-meta"></p>
+        </article>
+      </section>
+    </div>
+    <footer><span>Built as a learning project with AI coding assistance.</span><span>Offline scenario checks are not a production accuracy benchmark.</span></footer>
+  </main>
+</body>
+</html>
