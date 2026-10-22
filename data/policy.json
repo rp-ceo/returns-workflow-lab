@@ -1,0 +1,9 @@
+{
+  "name": "Northline Demo Store",
+  "reference_date": "2026-10-22",
+  "return_window_days": 30,
+  "manual_review_above_eur": 150,
+  "supported_countries": ["ES", "FR", "DE"],
+  "minimum_extraction_confidence": 0.85,
+  "note": "Fictional policy and fixed reference date for reproducible tests. No real retailer policy is represented."
+}
