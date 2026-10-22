@@ -5,8 +5,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 from workflow import ROOT, Store, TicketConflict, load_data, load_tickets
+from shop_api import ShopClient
 
 STORE = Store(ROOT / "runtime/runs.sqlite3")
+SHOP = ShopClient(os.environ["ORDER_API_URL"]) if os.environ.get("ORDER_API_URL") else None
+
+
+def process(raw_ticket, mode):
+    return STORE.process(raw_ticket, mode, **({"order_lookup": SHOP.get_order} if SHOP else {}))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -25,7 +31,7 @@ class Handler(BaseHTTPRequestHandler):
         route = urlparse(self.path).path
         if route == "/api/state":
             policy, orders = load_data()
-            return self.reply({"policy": policy, "runs": STORE.list_runs(), "samples": load_tickets(), "live_available": bool(os.environ.get("OPENAI_API_KEY")), "order_count": len(orders)})
+            return self.reply({"policy": policy, "runs": STORE.list_runs(), "samples": load_tickets(), "live_available": bool(os.environ.get("OPENAI_API_KEY")), "order_count": len(orders), "order_source": "Sandbox HTTP API" if SHOP else "Local fixtures"})
         files = {"/": ("index.html", "text/html"), "/style.css": ("style.css", "text/css"), "/app.js": ("app.js", "application/javascript")}
         if route in files:
             name, kind = files[route]
@@ -51,12 +57,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply({"error": "Live mode is not configured. The demo mode works without an API key."}, 400)
             route = urlparse(self.path).path
             if route == "/api/process":
-                return self.reply(STORE.process(payload.get("ticket"), mode))
+                return self.reply(process(payload.get("ticket"), mode))
             if route == "/api/demo":
                 # Batch is intentionally offline; live calls require one explicit ticket submission.
                 if mode != "demo":
                     raise ValueError("Batch demo uses the offline classifier. Use Process request for one live ticket.")
-                results = [STORE.process(ticket, "demo") for ticket in load_tickets()]
+                results = [process(ticket, "demo") for ticket in load_tickets()]
                 return self.reply({"results": results})
             return self.reply({"error": "Not found"}, 404)
         except TicketConflict as error:

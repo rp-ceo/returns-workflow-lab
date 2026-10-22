@@ -158,13 +158,13 @@ def openai_extract(ticket):
     return result
 
 
-def process_ticket(raw_ticket, mode="demo", extractor=None, policy=None, orders=None):
+def process_ticket(raw_ticket, mode="demo", extractor=None, policy=None, orders=None, order_lookup=None):
     ticket = clean_ticket(raw_ticket)
     if mode not in ("demo", "live"):
         raise ValueError("Mode must be demo or live.")
     default_policy, default_orders = load_data()
-    policy = policy or default_policy
-    orders = orders or default_orders
+    policy = default_policy if policy is None else policy
+    orders = default_orders if orders is None else orders
     started = time.perf_counter()
     result = {
         "ticket_id": ticket["ticket_id"],
@@ -219,13 +219,17 @@ def process_ticket(raw_ticket, mode="demo", extractor=None, policy=None, orders=
     if not reference:
         draft = "Por favor, envíanos el número de pedido para que podamos revisar tu solicitud." if extraction["language"] == "es" else "Please share your order reference so we can check your request."
         return done("order_reference_request_draft", "An order reference is needed before checking eligibility.", draft)
-    order = orders.get(reference)
-    if not check("Order exists", bool(order), "Looked up in the synthetic order dataset."):
+    try:
+        order = order_lookup(reference) if order_lookup is not None else orders.get(reference)
+    except RuntimeError:
+        return done("human_review", "Order service unavailable. A person must check the request; no order facts guessed.")
+    source = "sandbox HTTP order service" if order_lookup is not None else "synthetic order dataset"
+    if not check("Order exists", bool(order), "Looked up in the " + source + "."):
         return done("human_review", "Order reference was not found.")
     if not check("Customer email matches", ticket["sender_email"].casefold() == order["customer_email"].casefold(), "Demo identity check only; production would need authenticated identity."):
         return done("human_review", "The sender does not match the order owner. No order details disclosed.")
     result["order"] = {k: v for k, v in order.items() if k != "customer_email"}
-    result["trace"].append({"step": "Look up order", "detail": "Matched " + reference + " in synthetic order data."})
+    result["trace"].append({"step": "Look up order", "detail": "Matched " + reference + " through the " + source + "."})
     if category == "delivery_status":
         status = "en tránsito" if order["status"] == "in_transit" else "entregado"
         draft = ("El estado del pedido " + reference + " es " + status + ". Referencia de seguimiento de prueba: " + order["tracking_reference"] + ".") if extraction["language"] == "es" else ("Order " + reference + " is " + order["status"].replace("_", " ") + ". Demo tracking reference: " + order["tracking_reference"] + ".")
