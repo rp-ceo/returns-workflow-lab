@@ -44,7 +44,7 @@ The web desk stores results in SQLite. Replaying an existing ID returns its save
 | Offline demo | Small keyword-based baseline | None |
 | Live AI | OpenAI Responses API with Structured Outputs | One per new live ticket |
 
-Live mode requires `OPENAI_API_KEY` in the server environment. `OPENAI_MODEL` defaults to `gpt-4o-mini`. `.env.example` is a template; it is not loaded automatically. The API follows the [official Structured Outputs documentation](https://developers.openai.com/api/docs/guides/structured-outputs).
+Live mode requires `OPENAI_API_KEY`. The project loads it from the ignored local `.env.local` file, or from the server environment. Existing environment values take precedence. `OPENAI_MODEL` defaults to `gpt-4o-mini`. `.env.example` is only a template; it is not loaded automatically. The API follows the [official Structured Outputs documentation](https://developers.openai.com/api/docs/guides/structured-outputs).
 
 Only message text goes to the model. Extracted references and supporting excerpts are validated against that text. Errors and invalid responses go to human review; the app does not substitute offline results for a failed live call. Model confidence is a routing heuristic, not a calibrated probability.
 
@@ -71,7 +71,7 @@ Deduplication searches for a stable ticket marker and payload hash. Demo runs ar
 
 | Check | Current evidence |
 | --- | --- |
-| Automated tests | 27 passed locally and in GitHub Actions, including real loopback HTTP tests |
+| Automated tests | 31 tests, including real loopback HTTP tests, local configuration and provider-error handling |
 | Original business scenarios | 14/14 expected routes matched offline |
 | Broader challenge set | 34/40 expected routes matched offline; 0 review-required cases drafted in this set |
 | Live AI | API integration implemented; a real provider call has not yet been verified |
