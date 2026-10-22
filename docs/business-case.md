@@ -42,7 +42,7 @@ Suppose a team receives 1,000 requests in a week, including 300 repetitive statu
 
 ## Evidence from this project
 
-The local offline classifier matched 34 of 40 expected routes on the authored synthetic challenge set. It misses some paraphrases and negation. That is a useful baseline limitation to inspect; it is not a production performance claim. A live model comparison remains pending API access.
+The local offline classifier matched 34 of 40 expected routes on the authored synthetic challenge set. It misses some paraphrases and negation. The same 40 authored cases were subsequently run in live mode: 40 expected routes matched, with 38 validated model extractions and two pre-model safety stops. Actual local n8n runs also verified the draft route, the high-value exception and replay without repeated processing. See [the verification notes](live-verification.md). These are small synthetic demonstrations, not production accuracy or measured customer outcomes.
 
 The GitHub integration is a demonstration of handing off a real task through an external API. GitHub is used as an accessible test queue; this does not imply that REVER uses GitHub for customer support.
 
