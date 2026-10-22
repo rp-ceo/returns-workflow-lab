@@ -90,26 +90,28 @@ class WorkflowTests(unittest.TestCase):
 
     def test_completed_provider_payload_is_validated_and_policy_still_runs(self):
         extraction = rule_extract(self.ticket)
-        body = {"status": "completed", "output": [{"type": "message", "content": [
+        body = {"status": "completed", "usage": {"input_tokens": 200, "output_tokens": 50, "total_tokens": 250}, "output": [{"type": "message", "content": [
             {"type": "output_text", "text": json.dumps(extraction)}]}]}
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder", "OPENAI_MODEL": "gpt-6-luna"}), \
                 patch("workflow.urllib.request.urlopen", return_value=io.BytesIO(json.dumps(body).encode())) as provider:
             result = process_ticket(self.ticket, "live")
         self.assertEqual(result["route"], "return_instructions_draft")
         self.assertTrue(result["checks"])
+        self.assertEqual(result["provider_usage"]["total_tokens"], 250)
         sent = json.loads(provider.call_args[0][0].data)
         self.assertEqual(sent["reasoning"], {"effort": "none"})
         self.assertFalse(sent["store"])
         self.assertNotIn(self.ticket["sender_email"], sent["input"])
 
     def test_incomplete_provider_response_never_becomes_a_draft(self):
-        body = {"status": "incomplete", "output": []}
+        body = {"status": "incomplete", "usage": {"input_tokens": 100, "output_tokens": 400, "total_tokens": 500}, "output": []}
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder"}), \
                 patch("workflow.urllib.request.urlopen", return_value=io.BytesIO(json.dumps(body).encode())):
             result = process_ticket(self.ticket, "live")
         self.assertEqual(result["route"], "human_review")
         self.assertIsNone(result["extraction"])
         self.assertIsNone(result["draft"])
+        self.assertEqual(result["provider_usage"]["output_tokens"], 400)
 
     def test_invalid_scores_are_rejected(self):
         for score in (True, float("nan"), 2, -1):
