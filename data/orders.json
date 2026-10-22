@@ -1,0 +1,8 @@
+[
+  {"order_id":"ORD-1001","customer_email":"alex@example.com","status":"delivered","delivered_at":"2026-10-15","total_eur":79,"country":"ES","tracking_reference":"DEMO-TRACK-1001"},
+  {"order_id":"ORD-1002","customer_email":"sam@example.com","status":"in_transit","delivered_at":null,"total_eur":65,"country":"FR","tracking_reference":"DEMO-TRACK-1002"},
+  {"order_id":"ORD-1003","customer_email":"mia@example.com","status":"delivered","delivered_at":"2026-09-01","total_eur":49,"country":"ES","tracking_reference":"DEMO-TRACK-1003"},
+  {"order_id":"ORD-1004","customer_email":"leo@example.com","status":"delivered","delivered_at":"2026-10-18","total_eur":299,"country":"DE","tracking_reference":"DEMO-TRACK-1004"},
+  {"order_id":"ORD-1005","customer_email":"ines@example.com","status":"delivered","delivered_at":"2026-10-12","total_eur":89,"country":"PT","tracking_reference":"DEMO-TRACK-1005"},
+  {"order_id":"ORD-1006","customer_email":"ana@example.com","status":"delivered","delivered_at":"2026-10-20","total_eur":59,"country":"ES","tracking_reference":"DEMO-TRACK-1006"}
+]
