@@ -1,0 +1,188 @@
+{
+  "id": "ReturnOpsLive001",
+  "name": "ReturnOps - AI request triage",
+  "active": false,
+  "nodes": [
+    {
+      "id": "8e329f80-f79d-5472-975b-dee9b6371618",
+      "name": "Manual scenario",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d7540f4a-ef8b-5753-bb32-22a646ae7393",
+      "name": "Incoming request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        230,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\"mode\": \"live\", \"ticket\": {\"ticket_id\": \"N8N-RETURN-001\", \"sender_email\": \"alex@example.com\", \"message\": \"I would like to return order ORD-1001 because the size is wrong.\"}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "f87d0366-c61f-5273-a95f-f802ee370538",
+      "name": "Classify and check policy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8765/api/process",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "3f2984f1-56f2-5538-b895-c085abdcdbd5",
+      "name": "Needs a person",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        710,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "review-route",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "human_review",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1da1439-6213-5636-823a-ef5a782e292a",
+      "name": "Create exception handoff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        -110
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8765/api/dispatch",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({event_id: \"n8n-exceptions-\" + $json.mode + \"-\" + $json.ticket_id, ticket_id: $json.ticket_id, mode: $json.mode, source: \"n8n\", destination: \"exceptions\"}) }}",
+        "options": {
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "0699e036-2bc2-570d-83af-313d51d8dbd5",
+      "name": "Queue draft for approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        110
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8765/api/dispatch",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({event_id: \"n8n-draft_approval-\" + $json.mode + \"-\" + $json.ticket_id, ticket_id: $json.ticket_id, mode: $json.mode, source: \"n8n\", destination: \"draft_approval\"}) }}",
+        "options": {
+          "timeout": 10000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual scenario": {
+      "main": [
+        [
+          {
+            "node": "Incoming request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Incoming request": {
+      "main": [
+        [
+          {
+            "node": "Classify and check policy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify and check policy": {
+      "main": [
+        [
+          {
+            "node": "Needs a person",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs a person": {
+      "main": [
+        [
+          {
+            "node": "Create exception handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Queue draft for approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "66d09362-635f-56b5-b97c-acaefef7d887",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
