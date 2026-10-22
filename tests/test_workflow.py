@@ -1,5 +1,7 @@
 import json
+import io
 import tempfile
+import urllib.error
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -68,6 +70,23 @@ class WorkflowTests(unittest.TestCase):
             raise RuntimeError("Provider unavailable")
         result = process_ticket(self.ticket, "live", extractor=broken)
         self.assertEqual(result["route"], "human_review")
+
+    def test_quota_error_is_identified_without_raw_provider_message(self):
+        error = urllib.error.HTTPError("https://api.openai.com/v1/responses", 429, "Too many requests", {},
+                                       io.BytesIO(json.dumps({"error": {"code": "insufficient_quota", "message": "sensitive diagnostic text"}}).encode()))
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder"}), patch("workflow.urllib.request.urlopen", side_effect=error):
+            result = process_ticket(self.ticket, "live")
+        self.assertIn("insufficient_quota", result["reason"])
+        self.assertNotIn("sensitive diagnostic text", result["reason"])
+        self.assertEqual(result["route"], "human_review")
+
+    def test_unknown_provider_error_does_not_echo_arbitrary_error_code(self):
+        error = urllib.error.HTTPError("https://api.openai.com/v1/responses", 400, "Bad request", {},
+                                       io.BytesIO(json.dumps({"error": {"code": "do-not-echo-this", "message": "private text"}}).encode()))
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder"}), patch("workflow.urllib.request.urlopen", side_effect=error):
+            result = process_ticket(self.ticket, "live")
+        self.assertIn("unclassified", result["reason"])
+        self.assertNotIn("do-not-echo", result["reason"])
 
     def test_invalid_scores_are_rejected(self):
         for score in (True, float("nan"), 2, -1):
