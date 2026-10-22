@@ -16,9 +16,19 @@ An earlier smoke request failed output validation and went to human review. That
 
 ## Interfaces checked
 
-The browser workflow was also tested with a real AI call and a separate loopback order service. The model extracted the return request; the application checked the fictional order and prepared a draft. The screenshot in the main README shows that run.
+The browser workflow was also tested with a real AI call and a separate loopback order service. The model extracted the return request; the application checked the fictional order and prepared a draft. The current README shows the operations inbox after the AI and n8n checks.
 
 The separate GitHub Issues integration was verified in offline mode: [task #1](https://github.com/rp-ceo/returns-workflow-lab/issues/1) was created and reused on rerun. The live model and the GitHub write were checked separately; this is not a claim that a live cloud workflow has already combined both.
+
+## Local n8n and operator workflow
+
+Two workflows were imported into actual local n8n 2.44.6 and executed using its CLI. The EUR 79 return reached draft approval; the EUR 299 return reached exception review because it exceeded the fictional EUR 150 threshold. Repeating the first workflow reused the processed case and dispatch receipt without another model call.
+
+[Verification summary](../artifacts/n8n-verification.json), [normal route](../artifacts/n8n-return-run.json), [exception route](../artifacts/n8n-review-run.json), [replay](../artifacts/n8n-replay-run.json). Each saved node result contains fictional data only; n8n's private configuration and credentials are excluded.
+
+The browser desk was checked by editing and approving a draft, recording an exception's next step, and reloading to confirm persistence. The automated suite has 39 passing tests, including operator revision conflicts, event replay and invalid review actions. Provider handling in unit tests uses mock responses; the live evaluation and n8n runs above made real calls.
+
+The n8n trigger is a manual synthetic sample. Queue routing saves local events. No production webhook, helpdesk, customer email or refund provider is connected.
 
 ## Interpretation
 
