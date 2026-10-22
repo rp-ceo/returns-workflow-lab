@@ -1,0 +1,44 @@
+name: Run an operations scenario
+on:
+  workflow_dispatch:
+    inputs:
+      ticket:
+        description: Fictional scenario
+        required: true
+        default: DEMO-005
+        type: choice
+        options: [DEMO-001, DEMO-002, DEMO-005, DEMO-006, DEMO-010]
+      mode:
+        description: Classifier; live requires the OPENAI_API_KEY repository secret
+        required: true
+        default: demo
+        type: choice
+        options: [demo, live]
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: returnops-demo-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  scenario:
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Process synthetic request and create review task if needed
+        env:
+          TICKET: ${{ inputs.ticket }}
+          MODE: ${{ inputs.mode }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python run_case.py --ticket "$TICKET" --mode "$MODE" --publish
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: operations-scenario
+          path: artifacts/integration-result.json
