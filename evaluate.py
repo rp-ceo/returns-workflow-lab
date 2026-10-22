@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from workflow import ROOT, process_ticket
+from workflow import ROOT, DEFAULT_MODEL, process_ticket
 
 
 def main():
@@ -23,11 +23,19 @@ def main():
         rows.append({"id": case["ticket_id"], "message": case["message"], "expected_route": case["expected_route"],
                      "actual_route": result["route"], "matched": result["route"] == case["expected_route"],
                      "validated_live_extraction": args.mode == "live" and result["extraction"] is not None,
+                     "classification_attempted": result["classification_attempted"],
+                     "model": result["model"], "extraction": result["extraction"],
+                     "provider_usage": result["provider_usage"], "duration_ms": result["duration_ms"],
                      "reason": result["reason"]})
+        print(case["ticket_id"] + ": " + result["route"] + (" [match]" if rows[-1]["matched"] else " [mismatch]"), flush=True)
     report = {"generated_at": datetime.now(timezone.utc).isoformat(), "mode": args.mode,
               "scope": "Authored synthetic challenge set. Not held-out customer data or a production accuracy benchmark.",
               "case_count": len(rows), "route_matches": sum(row["matched"] for row in rows),
               "validated_live_extractions": sum(row["validated_live_extraction"] for row in rows),
+              "provider_calls_attempted": sum(row["classification_attempted"] for row in rows) if args.mode == "live" else 0,
+              "model": os.environ.get("OPENAI_MODEL", DEFAULT_MODEL) if args.mode == "live" else None,
+              "reported_token_usage": {name: sum((row["provider_usage"] or {}).get(name, 0) for row in rows)
+                                       for name in ("input_tokens", "output_tokens", "total_tokens")},
               "review_required_but_drafted": sum(row["expected_route"] == "human_review" and row["actual_route"] != "human_review" for row in rows),
               "cases": rows}
     target = ROOT / ("artifacts/evaluation-" + args.mode + ".json")
