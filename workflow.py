@@ -11,6 +11,9 @@ import urllib.error
 import urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
+from settings import load_local_env
+
+load_local_env()
 
 ROOT = Path(__file__).resolve().parent
 CATEGORIES = ("return_request", "delivery_status", "damaged_item", "payment_problem", "other")
@@ -142,7 +145,20 @@ def openai_extract(ticket):
         with urllib.request.urlopen(request, timeout=25) as response:
             body = json.load(response)
     except urllib.error.HTTPError as error:
-        raise RuntimeError("Model provider returned HTTP " + str(error.code) + "; check access, quota and model configuration.") from None
+        # Report a small allowlist of error codes, never raw provider messages or credentials.
+        known_codes = {
+            "insufficient_quota", "credit_balance_exhausted", "organization_spend_limit_exceeded",
+            "project_spend_limit_exceeded", "organization_usage_limit_exceeded", "usage_limit_exceeded",
+            "rate_limit_exceeded", "slow_down", "invalid_api_key", "model_not_found", "permission_denied",
+        }
+        provider_code = "unclassified"
+        try:
+            code = json.loads(error.read(8192)).get("error", {}).get("code")
+            if code in known_codes:
+                provider_code = code
+        except (ValueError, TypeError, AttributeError):
+            pass
+        raise RuntimeError("Model provider returned HTTP " + str(error.code) + " (" + provider_code + "); check access, quota and model configuration.") from None
     except (urllib.error.URLError, TimeoutError):
         raise RuntimeError("Model provider could not be reached before the timeout.") from None
     if body.get("status") != "completed":
