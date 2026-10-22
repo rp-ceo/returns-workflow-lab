@@ -6,7 +6,7 @@ The project follows one support request from intake to a checked response draft 
 
 It is an independent learning project inspired by returns operations. All customers, orders and store rules are fictional.
 
-![The local decision desk](docs/demo-screenshot.jpg)
+![The decision desk processing a real AI extraction](docs/live-demo.png)
 
 ## The process
 
@@ -76,7 +76,7 @@ Deduplication searches for a stable ticket marker and payload hash. Demo runs ar
 | Automated tests | 33 tests, including real loopback HTTP tests, local configuration and provider-response handling |
 | Original business scenarios | 14/14 expected routes matched offline |
 | Broader challenge set | 34/40 expected routes matched offline; 0 review-required cases drafted in this set |
-| Live AI | API integration implemented; a real provider call has not yet been verified |
+| Live AI | Verified with `gpt-6-luna`: 40/40 expected routes on the authored set; 38 validated provider calls, 2 pre-model safety stops. [Saved results](artifacts/evaluation-live.json) |
 | GitHub review-task API | Verified: [created task #1](https://github.com/rp-ceo/returns-workflow-lab/issues/1); [rerun reused it](https://github.com/rp-ceo/returns-workflow-lab/actions/runs/39857793546). See [verification record](artifacts/github-integration-verification.json) |
 
 ```sh
@@ -85,7 +85,7 @@ python3 evaluate.py --mode demo
 python3 run_case.py --ticket DEMO-005 --mode demo
 ```
 
-The 40-case set includes English/Spanish requests, paraphrases, negation, missing references, mismatched customers and policy exceptions. Six route mismatches remain in the offline baseline; inspect `artifacts/evaluation-demo.json`. These authored synthetic examples are not held-out customer data, production accuracy, autonomous-resolution rate or measured time savings.
+The 40-case set includes English/Spanish requests, paraphrases, negation, missing references, mismatched customers and policy exceptions. Six route mismatches remain in the offline baseline; inspect `artifacts/evaluation-demo.json`. The same set has also been run through the real model: 40/40 routes matched, with 38 validated API extractions and two messages stopped before a model call. See the [verification notes](docs/live-verification.md). These authored synthetic examples are not held-out customer data, production accuracy, autonomous-resolution rate or measured time savings.
 
 With a configured API key, `python3 evaluate.py --mode live --limit 5` runs a small live comparison. This makes paid provider calls. A full 40-case comparison should be run deliberately after checking model access and budget.
 
