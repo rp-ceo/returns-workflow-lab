@@ -1,5 +1,10 @@
-# Demo screenshot
+# Project notes
 
-`demo-screenshot.jpg` shows the local interface after running the 14 synthetic scenarios in offline mode and replaying an existing ticket.
+- [Operations desk](operations-desk.jpg): current inbox after real local AI and n8n runs, with fictional requests.
+- [Automation workflow](automation-workflow.jpg): the desk's workflow map and saved n8n receipts. This is not a screenshot of the n8n editor.
+- [Five-minute walkthrough](demo-guide.md)
+- [Verification evidence and limits](live-verification.md)
+- [Design decisions](architecture-decisions.md)
+- [Business case](business-case.md)
 
-All customers and orders are fictional. The screenshot does not show a live model call or a production integration.
+The older `demo-screenshot.jpg` shows the original offline interface. `live-demo.png` shows the earlier interface during a real AI call. All customer/order data is fictional in every image.
