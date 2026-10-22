@@ -6,13 +6,15 @@ from urllib.parse import urlparse
 
 from workflow import ROOT, Store, TicketConflict, load_data, load_tickets
 from shop_api import ShopClient
+from operations import Operations
 
 STORE = Store(ROOT / "runtime/runs.sqlite3")
+OPS = Operations(STORE)
 SHOP = ShopClient(os.environ["ORDER_API_URL"]) if os.environ.get("ORDER_API_URL") else None
 
 
 def process(raw_ticket, mode):
-    return STORE.process(raw_ticket, mode, **({"order_lookup": SHOP.get_order} if SHOP else {}))
+    return OPS.decorate(STORE.process(raw_ticket, mode, **({"order_lookup": SHOP.get_order} if SHOP else {})))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -31,7 +33,13 @@ class Handler(BaseHTTPRequestHandler):
         route = urlparse(self.path).path
         if route == "/api/state":
             policy, orders = load_data()
-            return self.reply({"policy": policy, "runs": STORE.list_runs(), "samples": load_tickets(), "live_available": bool(os.environ.get("OPENAI_API_KEY")), "order_count": len(orders), "order_source": "Sandbox HTTP API" if SHOP else "Local fixtures"})
+            evaluation_path = ROOT / "artifacts/evaluation-live.json"
+            evaluation = json.loads(evaluation_path.read_text()) if evaluation_path.exists() else None
+            orchestration_path = ROOT / "artifacts/n8n-verification.json"
+            orchestration = json.loads(orchestration_path.read_text()) if orchestration_path.exists() else None
+            return self.reply({"policy": policy, "runs": OPS.list_runs(), "samples": load_tickets(), "live_available": bool(os.environ.get("OPENAI_API_KEY")), "order_count": len(orders), "order_source": "Sandbox HTTP API" if SHOP else "Local fixtures", "evaluation": evaluation, "orchestration": orchestration})
+        if route == "/api/workflow":
+            return self.reply(json.loads((ROOT / "automation/n8n/returns-triage.json").read_text()))
         files = {"/": ("index.html", "text/html"), "/style.css": ("style.css", "text/css"), "/app.js": ("app.js", "application/javascript")}
         if route in files:
             name, kind = files[route]
@@ -50,12 +58,16 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length))
             if not isinstance(payload, dict):
                 raise ValueError("The request body must be an object.")
+            route = urlparse(self.path).path
+            if route == "/api/review":
+                return self.reply(OPS.review(payload))
+            if route == "/api/dispatch":
+                return self.reply(OPS.dispatch(payload))
             mode = payload.get("mode", "demo")
             if mode not in ("demo", "live"):
                 raise ValueError("Mode must be demo or live.")
             if mode == "live" and not os.environ.get("OPENAI_API_KEY"):
                 return self.reply({"error": "Live mode is not configured. The demo mode works without an API key."}, 400)
-            route = urlparse(self.path).path
             if route == "/api/process":
                 return self.reply(process(payload.get("ticket"), mode))
             if route == "/api/demo":
@@ -67,8 +79,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply({"error": "Not found"}, 404)
         except TicketConflict as error:
             return self.reply({"error": str(error)}, 409)
-        except (ValueError, TypeError, KeyError):
-            return self.reply({"error": "Invalid request. Check the ticket ID, email, message and order reference."}, 400)
+        except (ValueError, TypeError, KeyError) as error:
+            message = str(error) if isinstance(error, ValueError) and type(error) is ValueError else "Invalid request fields."
+            return self.reply({"error": message}, 400)
 
     def log_message(self, format, *args):
         # No payloads, customer messages or credentials in access logs.
