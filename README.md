@@ -71,11 +71,11 @@ Deduplication searches for a stable ticket marker and payload hash. Demo runs ar
 
 | Check | Current evidence |
 | --- | --- |
-| Automated tests | 27 passed locally, including real loopback HTTP tests |
+| Automated tests | 27 passed locally and in GitHub Actions, including real loopback HTTP tests |
 | Original business scenarios | 14/14 expected routes matched offline |
 | Broader challenge set | 34/40 expected routes matched offline; 0 review-required cases drafted in this set |
 | Live AI | API integration implemented; a real provider call has not yet been verified |
-| GitHub review-task API | Code and tests implemented; see the integration report for the verified run status |
+| GitHub review-task API | Verified: [created task #1](https://github.com/rp-ceo/returns-workflow-lab/issues/1); [rerun reused it](https://github.com/rp-ceo/returns-workflow-lab/actions/runs/39857793546). See [verification record](artifacts/github-integration-verification.json) |
 
 ```sh
 python3 run_demo.py
