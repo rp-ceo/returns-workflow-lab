@@ -7,3 +7,8 @@ __pycache__/
 runtime/
 .DS_Store
 
+
+# Generated reports (including outputs from older script versions).
+artifacts/
+integration-result.json
+node_modules/

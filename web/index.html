@@ -1,66 +1,403 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>ReturnOps · Returns workspace</title>
-  <link rel="stylesheet" href="/style.css">
-  <script src="/app.js" defer></script>
-</head>
-<body>
-<div class="app-shell">
-  <aside class="sidebar">
-    <a class="brand" href="/" aria-label="ReturnOps home"><span class="brand-mark" aria-hidden="true">↵</span><span>ReturnOps<small>OPERATIONS DESK</small></span></a>
-    <div class="workspace-label">WORKSPACE</div>
-    <nav aria-label="Workspace">
-      <button class="nav-item active" data-view="queue"><span class="nav-icon" aria-hidden="true">▤</span><span>Returns</span><b id="nav-count">0</b></button>
-      <button class="nav-item" data-view="workflow"><span class="nav-icon" aria-hidden="true">⇄</span><span>Workflow</span></button>
-      <button class="nav-item" data-view="checks"><span class="nav-icon" aria-hidden="true">✓</span><span>Verification</span></button>
-    </nav>
-    <div class="sidebar-note"><span class="status-dot"></span> LOCAL WORKSPACE<p>Fictional orders.<br>No messages or refunds sent.</p></div>
-    <div class="sidebar-bottom"><div class="store-icon">N</div><div><strong>Northline Store</strong><small>Demo merchant</small></div></div>
-  </aside>
-  <main>
-    <header class="topbar"><div class="breadcrumb">Northline Store <span>/</span> <strong id="view-label">Returns</strong></div><span class="environment"><i></i> Sandbox</span></header>
-    <section class="page-heading"><div><div class="eyebrow">CUSTOMER OPERATIONS</div><h1 id="page-title">Returns inbox</h1><p id="page-subtitle">Every request, its checks, and the next step.</p></div><div class="heading-actions"><button class="button" id="refresh">Refresh</button><button class="button primary" id="new-request">＋ New request</button></div></section>
-    <p class="notification" id="feedback" role="status" aria-live="polite" hidden></p>
-    <section id="queue-view">
-      <div class="summary-strip">
-        <button data-status="needs_review"><span><i class="metric-dot amber-dot"></i>Needs review</span><strong id="review-count">0</strong></button>
-        <button data-status="draft_ready"><span><i class="metric-dot teal-dot"></i>Draft approval</span><strong id="draft-count">0</strong></button>
-        <button data-status="done"><span><i class="metric-dot slate-dot"></i>Reviewed</span><strong id="done-count">0</strong></button>
-        <div><span>Workflow routed</span><strong id="n8n-count">0</strong><small>via n8n</small></div>
-      </div>
-      <div class="desk">
-        <section class="queue-panel" aria-label="Request queue">
-          <div class="queue-title"><h2>Work queue</h2><span id="queue-size">0 requests</span></div>
-          <div class="queue-toolbar"><div class="tabs" role="group" aria-label="Queue filter"><button class="active" data-status="all">All</button><button data-status="needs_review">Needs review</button><button data-status="draft_ready">Drafts</button><button data-status="done">Reviewed</button></div><label class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" aria-label="Search cases" placeholder="Find a request, order or customer"></label></div>
-          <div class="table-scroll"><table class="case-table"><thead><tr><th>Request</th><th>Status</th></tr></thead><tbody id="case-rows"></tbody></table><div id="queue-empty" class="empty" hidden><strong>No matching requests</strong><span>Try another filter or search.</span></div></div>
-          <div class="queue-footer"><span>Fictional customer requests</span><button class="text-button" id="load-scenarios">Load sample queue</button></div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>ReturnOps · Returns workspace</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="/" aria-label="ReturnOps home"
+          ><span class="brand-mark" aria-hidden="true">↵</span
+          ><span>ReturnOps<small>OPERATIONS DESK</small></span></a
+        >
+        <div class="workspace-label">WORKSPACE</div>
+        <nav aria-label="Workspace">
+          <button class="nav-item active" data-view="queue">
+            <span class="nav-icon" aria-hidden="true">▤</span
+            ><span>Returns</span><b id="nav-count">0</b>
+          </button>
+          <button class="nav-item" data-view="workflow">
+            <span class="nav-icon" aria-hidden="true">⇄</span
+            ><span>Workflow</span>
+          </button>
+          <button class="nav-item" data-view="checks">
+            <span class="nav-icon" aria-hidden="true">✓</span
+            ><span>Verification</span>
+          </button>
+        </nav>
+        <div class="sidebar-note">
+          <span class="status-dot"></span> LOCAL WORKSPACE
+          <p>Fictional orders.<br />No messages or refunds sent.</p>
+        </div>
+        <div class="sidebar-bottom">
+          <div class="store-icon">N</div>
+          <div>
+            <strong>Northline Store</strong><small>Demo merchant</small>
+          </div>
+        </div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div class="breadcrumb">
+            Northline Store <span>/</span>
+            <strong id="view-label">Returns</strong>
+          </div>
+          <span class="environment"><i></i> Sandbox</span>
+        </header>
+        <section class="page-heading">
+          <div>
+            <div class="eyebrow">CUSTOMER OPERATIONS</div>
+            <h1 id="page-title">Returns inbox</h1>
+            <p id="page-subtitle">
+              Every request, its checks, and the next step.
+            </p>
+          </div>
+          <div class="heading-actions">
+            <button class="button" id="refresh">Refresh</button
+            ><button class="button primary" id="new-request">
+              ＋ New request
+            </button>
+          </div>
         </section>
-        <section class="case-panel" id="case-panel" aria-label="Case details">
-          <div class="empty" id="no-selection"><strong>Choose a request</strong><span>Its order, checks and next step appear here.</span></div>
-          <article id="case-detail" hidden>
-            <div class="case-header"><div class="case-heading"><div><small id="case-id"></small><h2 id="case-title"></h2></div><span id="case-state" class="pill"></span></div><div class="case-meta" id="case-meta"></div></div>
-            <div class="case-body" id="case-body">
-              <div class="decision-banner" id="decision-banner"><span class="decision-symbol" id="decision-symbol" aria-hidden="true">!</span><div><strong id="next-action"></strong><p id="reason"></p></div></div>
-              <section class="case-section"><h3>Customer message</h3><p class="customer-message" id="original-message"></p><div class="evidence" id="intent-evidence"></div></section>
-              <div id="order-facts" class="order-facts"></div>
-              <section class="case-section" id="response-section"><div class="section-title"><h3>Response draft</h3><span>Editable template</span></div><label class="sr-only" for="draft-text">Response draft</label><textarea id="draft-text" rows="5"></textarea></section>
-              <section class="case-section"><div class="section-title"><h3>Decision checks</h3><span id="check-summary"></span></div><div id="checks"></div></section>
-              <details class="activity-details"><summary>Activity &amp; technical trace</summary><ol id="activity" class="activity"></ol><pre id="model-data"></pre></details>
+        <p
+          class="notification"
+          id="feedback"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></p>
+        <section id="queue-view">
+          <div class="summary-strip">
+            <button data-status="needs_review">
+              <span><i class="metric-dot amber-dot"></i>Needs review</span
+              ><strong id="review-count">0</strong>
+            </button>
+            <button data-status="draft_ready">
+              <span><i class="metric-dot teal-dot"></i>Draft approval</span
+              ><strong id="draft-count">0</strong>
+            </button>
+            <button data-status="done">
+              <span><i class="metric-dot slate-dot"></i>Reviewed</span
+              ><strong id="done-count">0</strong>
+            </button>
+            <div>
+              <span>Workflow routed</span><strong id="n8n-count">0</strong
+              ><small>via n8n</small>
             </div>
-            <section class="review-section"><div class="section-title"><h3>Operator decision</h3><button class="text-button" id="reset-edits" hidden>Reset edits</button></div><label class="sr-only" for="review-note">Review note</label><textarea id="review-note" rows="2" maxlength="1500" placeholder="Record the next step or explain your decision…"></textarea><div class="review-bottom"><div class="review-actions"><button class="button primary" id="approve-draft">Approve draft</button><button class="button primary" id="mark-reviewed">Mark reviewed</button><button class="button" id="hold-case">Needs investigation</button></div><span id="unsaved-label" hidden>Unsaved edits</span></div><p class="field-hint" id="review-state-note"></p></section>
-          </article>
+          </div>
+          <div class="desk">
+            <section class="queue-panel" aria-label="Request queue">
+              <div class="queue-title">
+                <h2>Work queue</h2>
+                <span id="queue-size">0 requests</span>
+              </div>
+              <div class="queue-toolbar">
+                <div class="tabs" role="group" aria-label="Queue filter">
+                  <button class="active" data-status="all">All</button
+                  ><button data-status="needs_review">Needs review</button
+                  ><button data-status="draft_ready">Drafts</button
+                  ><button data-status="done">Reviewed</button>
+                </div>
+                <label class="search-wrap"
+                  ><span aria-hidden="true">⌕</span
+                  ><input
+                    id="search"
+                    type="search"
+                    aria-label="Search cases"
+                    placeholder="Find a request, order or customer"
+                /></label>
+              </div>
+              <div class="table-scroll">
+                <table class="case-table">
+                  <thead>
+                    <tr>
+                      <th>Request</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="case-rows"></tbody>
+                </table>
+                <div id="queue-empty" class="empty" hidden>
+                  <strong>No matching requests</strong
+                  ><span>Try another filter or search.</span>
+                </div>
+              </div>
+              <div class="queue-footer">
+                <span>Fictional customer requests</span
+                ><button class="text-button" id="load-scenarios">
+                  Load sample queue
+                </button>
+              </div>
+            </section>
+            <section
+              class="case-panel"
+              id="case-panel"
+              aria-label="Case details"
+            >
+              <div class="empty" id="no-selection">
+                <strong>Choose a request</strong
+                ><span>Its order, checks and next step appear here.</span>
+              </div>
+              <article id="case-detail" hidden>
+                <div class="case-header">
+                  <div class="case-heading">
+                    <div>
+                      <small id="case-id"></small>
+                      <h2 id="case-title"></h2>
+                    </div>
+                    <span id="case-state" class="pill"></span>
+                  </div>
+                  <div class="case-meta" id="case-meta"></div>
+                </div>
+                <div class="case-body" id="case-body">
+                  <div class="decision-banner" id="decision-banner">
+                    <span
+                      class="decision-symbol"
+                      id="decision-symbol"
+                      aria-hidden="true"
+                      >!</span
+                    >
+                    <div>
+                      <strong id="next-action"></strong>
+                      <p id="reason"></p>
+                    </div>
+                  </div>
+                  <section class="case-section">
+                    <h3>Customer message</h3>
+                    <p class="customer-message" id="original-message"></p>
+                    <div class="evidence" id="intent-evidence"></div>
+                  </section>
+                  <div id="order-facts" class="order-facts"></div>
+                  <section class="case-section" id="response-section">
+                    <div class="section-title">
+                      <h3>Response draft</h3>
+                      <span>Editable template</span>
+                    </div>
+                    <label class="sr-only" for="draft-text"
+                      >Response draft</label
+                    ><textarea id="draft-text" rows="5"></textarea>
+                  </section>
+                  <section class="case-section">
+                    <div class="section-title">
+                      <h3>Decision checks</h3>
+                      <span id="check-summary"></span>
+                    </div>
+                    <div id="checks"></div>
+                  </section>
+                  <details class="activity-details">
+                    <summary>Activity &amp; technical trace</summary>
+                    <ol id="activity" class="activity"></ol>
+                    <pre id="model-data"></pre>
+                  </details>
+                </div>
+                <section class="review-section">
+                  <div class="section-title">
+                    <h3>Operator decision</h3>
+                    <button class="text-button" id="reset-edits" hidden>
+                      Reset edits
+                    </button>
+                  </div>
+                  <label class="sr-only" for="review-note">Review note</label
+                  ><textarea
+                    id="review-note"
+                    rows="2"
+                    maxlength="1500"
+                    placeholder="Record the next step or explain your decision…"
+                  ></textarea>
+                  <div class="review-bottom">
+                    <div class="review-actions">
+                      <button class="button primary" id="approve-draft">
+                        Approve draft</button
+                      ><button class="button primary" id="mark-reviewed">
+                        Mark reviewed</button
+                      ><button class="button" id="hold-case">
+                        Needs investigation
+                      </button>
+                    </div>
+                    <span id="unsaved-label" hidden>Unsaved edits</span>
+                  </div>
+                  <p class="field-hint" id="review-state-note"></p>
+                </section>
+              </article>
+            </section>
+          </div>
         </section>
-      </div>
-    </section>
-    <section id="workflow-view" hidden>
-      <div class="information-grid"><section class="content-card"><div class="card-title"><div><div class="eyebrow">ORCHESTRATION</div><h2>From request to next step</h2><p>n8n connects the steps. The service checks the facts.</p></div><a class="button" href="/api/workflow" download="returns-triage.json">Download workflow</a></div><div class="flow"><div><small>01 · MANUAL TRIGGER</small><strong>Receive a sample request</strong><span>A fictional message and a stable ticket ID</span></div><b>↓</b><div><small>02 · HTTP REQUEST</small><strong>Understand the request and check the order</strong><span>Python service → OpenAI extraction → order API → policy</span></div><b>↓</b><div><small>03 · CONDITION</small><strong>Does this need an operator?</strong><span>Branch on the service's saved decision</span></div><div class="flow-branches"><div><small>YES</small><strong>Exception review</strong><span>Reason and context attached</span></div><div><small>NO</small><strong>Draft approval</strong><span>An operator checks the reply</span></div></div></div><p class="field-hint">This diagram describes the imported n8n workflow. The trigger and queues use fictional data; no production helpdesk is connected.</p></section><section class="content-card"><div class="eyebrow">EXECUTION RECORDS</div><h2>What actually ran</h2><div id="orchestration-evidence"></div><h3>Responsibilities</h3><dl class="tool-list"><dt>n8n</dt><dd>Trigger, HTTP calls, branch and queue hand-off.</dd><dt>Python</dt><dd>Validation, order lookup and explicit policy rules.</dd><dt>OpenAI</dt><dd>Structured intent, reference and evidence extraction.</dd><dt>Order API</dt><dd>A separate local service with fictional orders.</dd><dt>SQLite</dt><dd>Saved cases, review history and replay protection.</dd><dt>GitHub</dt><dd>Automated checks and a separate review-task demo.</dd></dl></section></div>
-    </section>
-    <section id="checks-view" hidden><section class="content-card"><div class="card-title"><div><div class="eyebrow">SAVED LIVE EVALUATION</div><h2>Check the result, case by case</h2><p>Authored synthetic examples. These results do not establish production accuracy.</p></div><span class="pill teal" id="evaluation-model"></span></div><div class="evidence-summary" id="evaluation-summary"></div><div class="table-scroll evaluation-table"><table class="case-table"><thead><tr><th>Case</th><th>Expected</th><th>Observed</th><th>Result</th></tr></thead><tbody id="evaluation-rows"></tbody></table></div></section><section class="content-card policy-card"><div class="eyebrow">MERCHANT RULES</div><h2>The demo return policy</h2><dl id="policy-details"></dl><p class="field-hint">Fictional rules with a fixed reference date. Model confidence is an uncalibrated routing heuristic.</p></section></section>
-  </main>
-</div>
-<dialog id="request-dialog"><form id="ticket-form"><div class="dialog-heading"><div><div class="eyebrow">SANDBOX</div><h2>New request</h2><p>Try a fictional customer message.</p></div><button type="button" class="close-button" id="close-dialog" aria-label="Close request">×</button></div><label for="mode">Classifier</label><select id="mode"><option value="live" id="live-option">Live AI · OpenAI API</option><option value="demo">Rule baseline · no model call</option></select><p class="field-hint" id="mode-hint"></p><label for="sample">Sample case</label><select id="sample"><option value="">Custom request</option></select><div class="form-row"><div><label for="ticket-id">Ticket ID</label><input id="ticket-id" required maxlength="80"></div><div><label for="order-id">Order reference (optional)</label><input id="order-id" placeholder="ORD-1001"></div></div><label for="email">Customer email</label><input id="email" type="email" required autocomplete="off"><label for="message">Customer message</label><textarea id="message" rows="4" required maxlength="4000"></textarea><div class="dialog-footer"><button type="button" class="button" id="cancel-request">Cancel</button><button type="submit" class="button primary" id="process">Process request</button></div><p id="request-feedback" role="status" class="field-hint"></p></form></dialog>
-</body>
+        <section id="workflow-view" hidden>
+          <div class="information-grid">
+            <section class="content-card">
+              <div class="card-title">
+                <div>
+                  <div class="eyebrow">ORCHESTRATION</div>
+                  <h2>From request to next step</h2>
+                  <p>n8n connects the steps. The service checks the facts.</p>
+                </div>
+                <a
+                  class="button"
+                  href="/api/workflow"
+                  download="returns-triage.json"
+                  >Download workflow</a
+                >
+              </div>
+              <div class="flow">
+                <div>
+                  <small>01 · MANUAL TRIGGER</small
+                  ><strong>Receive a sample request</strong
+                  ><span>A fictional message and a stable ticket ID</span>
+                </div>
+                <b>↓</b>
+                <div>
+                  <small>02 · HTTP REQUEST</small
+                  ><strong>Understand the request and check the order</strong
+                  ><span
+                    >Python service → OpenAI extraction → order API →
+                    policy</span
+                  >
+                </div>
+                <b>↓</b>
+                <div>
+                  <small>03 · CONDITION</small
+                  ><strong>Does this need an operator?</strong
+                  ><span>Branch on the service's saved decision</span>
+                </div>
+                <div class="flow-branches">
+                  <div>
+                    <small>YES</small><strong>Exception review</strong
+                    ><span>Reason and context attached</span>
+                  </div>
+                  <div>
+                    <small>NO</small><strong>Draft approval</strong
+                    ><span>An operator checks the reply</span>
+                  </div>
+                </div>
+              </div>
+              <p class="field-hint">
+                This diagram describes the imported n8n workflow. The trigger
+                and queues use fictional data; no production helpdesk is
+                connected.
+              </p>
+            </section>
+            <section class="content-card">
+              <div class="eyebrow">EXECUTION RECORDS</div>
+              <h2>Queue hand-offs</h2>
+              <div id="orchestration-evidence"></div>
+              <h3>Responsibilities</h3>
+              <dl class="tool-list">
+                <dt>n8n</dt>
+                <dd>Trigger, HTTP calls, branch and queue hand-off.</dd>
+                <dt>Python</dt>
+                <dd>Validation, order lookup and explicit policy rules.</dd>
+                <dt>OpenAI</dt>
+                <dd>Structured intent, reference and evidence extraction.</dd>
+                <dt>Order API</dt>
+                <dd>A separate local service with fictional orders.</dd>
+                <dt>SQLite</dt>
+                <dd>Saved cases, review history and replay protection.</dd>
+                <dt>GitHub</dt>
+                <dd>Automated checks and a separate review-task demo.</dd>
+              </dl>
+            </section>
+          </div>
+        </section>
+        <section id="checks-view" hidden>
+          <section class="content-card">
+            <div class="card-title">
+              <div>
+                <div class="eyebrow">SAVED LIVE EVALUATION</div>
+                <h2>Check the result, case by case</h2>
+                <p>
+                  Authored synthetic examples. These results do not establish
+                  production accuracy.
+                </p>
+              </div>
+              <span class="pill teal" id="evaluation-model"></span>
+            </div>
+            <div class="evidence-summary" id="evaluation-summary"></div>
+            <p id="evaluation-empty" class="field-hint">
+              No local model evaluation has been saved. Run
+              <code>python3 evaluate.py --mode live</code> to compare the 40
+              sample cases. This makes paid API calls.
+            </p>
+            <div class="table-scroll evaluation-table">
+              <table class="case-table">
+                <thead>
+                  <tr>
+                    <th>Case</th>
+                    <th>Expected</th>
+                    <th>Observed</th>
+                    <th>Result</th>
+                  </tr>
+                </thead>
+                <tbody id="evaluation-rows"></tbody>
+              </table>
+            </div>
+          </section>
+          <section class="content-card policy-card">
+            <div class="eyebrow">MERCHANT RULES</div>
+            <h2>The demo return policy</h2>
+            <dl id="policy-details"></dl>
+            <p class="field-hint">
+              Fictional rules with a fixed reference date. Model confidence is
+              an uncalibrated routing heuristic.
+            </p>
+          </section>
+        </section>
+      </main>
+    </div>
+    <dialog id="request-dialog">
+      <form id="ticket-form">
+        <div class="dialog-heading">
+          <div>
+            <div class="eyebrow">SANDBOX</div>
+            <h2>New request</h2>
+            <p>Try a fictional customer message.</p>
+          </div>
+          <button
+            type="button"
+            class="close-button"
+            id="close-dialog"
+            aria-label="Close request"
+          >
+            ×
+          </button>
+        </div>
+        <label for="mode">Classifier</label
+        ><select id="mode">
+          <option value="live" id="live-option">Live AI · OpenAI API</option>
+          <option value="demo">Rule baseline · no model call</option>
+        </select>
+        <p class="field-hint" id="mode-hint"></p>
+        <label for="sample">Sample case</label
+        ><select id="sample">
+          <option value="">Custom request</option>
+        </select>
+        <div class="form-row">
+          <div>
+            <label for="ticket-id">Ticket ID</label
+            ><input id="ticket-id" required maxlength="80" />
+          </div>
+          <div>
+            <label for="order-id">Order reference (optional)</label
+            ><input id="order-id" placeholder="ORD-1001" />
+          </div>
+        </div>
+        <label for="email">Customer email</label
+        ><input id="email" type="email" required autocomplete="off" /><label
+          for="message"
+          >Customer message</label
+        ><textarea id="message" rows="4" required maxlength="4000"></textarea>
+        <div class="dialog-footer">
+          <button type="button" class="button" id="cancel-request">
+            Cancel</button
+          ><button type="submit" class="button primary" id="process">
+            Process request
+          </button>
+        </div>
+        <p id="request-feedback" role="status" class="field-hint"></p>
+      </form>
+    </dialog>
+  </body>
 </html>

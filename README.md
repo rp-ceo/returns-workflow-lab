@@ -1,107 +1,67 @@
 # ReturnOps
 
-An operations desk for reviewing return requests, with a working n8n workflow and AI-assisted intent extraction. Personal project by Roman Petrov, built with AI coding assistance.
+I built ReturnOps to organise return requests and order-status questions in one workspace. It reads the customer's message, checks the order and store policy, and prepares a reply or sends the case for review. An operator can edit the draft, record a decision and see the history.
 
-A customer asks to return an order. The system extracts what they need, fetches the order from a separate HTTP service, checks the merchant's rules, and routes the case to draft approval or exception review. An operator can edit the draft, record a decision and inspect its history.
+All customer records and store rules are fictional. The app does not send messages, issue labels or move money.
 
-All orders, customers and policies are fictional. This is an independent prototype, not a REVER integration.
+![Returns inbox](docs/operations-workspace.jpg)
 
-![Operations inbox with a value-threshold exception](docs/operations-workspace.jpg)
+## How it works
 
-## What runs
+1. A request arrives through the desk or an n8n workflow.
+2. Python validates it. The offline mode uses keyword rules; live mode asks OpenAI for structured intent, order reference and supporting text.
+3. A separate local HTTP service supplies the order. Python checks the sender, delivery date, return window, order value and country.
+4. The case reaches draft approval or exception review. SQLite stores the outcome and subsequent operator decisions.
 
-| Component | Responsibility |
-| --- | --- |
-| **n8n** | Manual scenario trigger, HTTP calls, conditional branch and recorded queue hand-off |
-| **Python service** | Input validation, order lookup, explicit policy checks and API endpoints |
-| **OpenAI Responses API** | Structured extraction of intent, order reference and supporting text |
-| **Sandbox order API** | Separate local HTTP service serving fictional order records |
-| **SQLite** | Saved outcomes, operator decisions, revision checks and event deduplication |
-| **Browser desk** | Searchable inbox, editable drafts, exception notes, activity history and evidence |
-| **GitHub Actions / Issues** | Automated checks and a separate, verified review-task integration |
+I kept policy decisions in Python and replies in [templates](drafts.py). The model cannot change the policy or execute merchant actions. n8n handles the HTTP calls, routing and queue hand-off. The browser interface uses plain HTML, CSS and JavaScript.
 
-The model interprets the message. Code applies the policy. The response is a policy-based template that an operator can edit. Unsaved draft and note edits are retained while switching cases; a reset control restores the saved version. Failed checks show their reason directly, and operator actions remain visible while reading the request. No customer message, shipping label or refund is sent.
+## Run locally
 
-## Run the desk
-
-Python 3.9+; the Python application uses only the standard library.
+Python 3.9 or later. The app itself has no third-party Python dependencies.
 
 ```sh
 python3 launch_demo.py
 ```
 
-Open http://127.0.0.1:8765. Click **Load sample queue** to fill the inbox without an API key. Select a case to inspect its order, checks and proposed next step. Approve a draft or record what should happen to an exception; both actions persist after reload.
+Open http://127.0.0.1:8765 and click **Load sample queue**. This runs without an API key. The launcher starts both the desk and the fictional order service on loopback. `python3 app.py` starts the desk alone, using local order fixtures.
 
-The launcher starts both the desk and the separate order HTTP service. `python3 app.py` also works, using local fixtures unless `ORDER_API_URL` is configured. Keep these development services on loopback.
+For live extraction, copy `.env.example` to `.env.local` and add an OpenAI API key. The file is ignored by git and loaded at startup; existing environment variables take precedence. The default model is `gpt-6-luna`, with a 400-token output limit. Live mode makes paid API calls. Only the message text is sent to OpenAI.
 
-## Run n8n
+To run the two n8n scenarios, follow the [local setup guide](automation/n8n/README.md).
 
-Two importable workflows are included in [automation/n8n](automation/n8n):
+## Retries and reviews
 
-- **ReturnOpsLive001**: a EUR 79 order reaches draft approval.
-- **ReturnOpsLive002**: a EUR 299 order exceeds the fictional EUR 150 threshold and reaches exception review.
+The same ticket ID and content reuse a saved outcome. Changing the content requires a new ID. Different tickets process concurrently; simultaneous retries of one ticket share a lock in the server process. No global or database lock is held during a model call. Separate server processes may still make duplicate model calls, although only one outcome can be saved.
 
-Both use real model extraction through the Python service. They were imported into local n8n 2.44.6 and executed successfully. Repeating the first workflow returned the saved result and queue receipt, without another model call. See the [execution evidence](artifacts/n8n-verification.json) and [setup instructions](automation/n8n/README.md).
+Review actions also have stable IDs and revision numbers. A stale browser cannot overwrite a newer decision. Exceptions require a note, and approving a draft only records approval.
 
-![Workflow map and saved n8n execution receipts in the desk](docs/workflow-overview.jpg)
-
-The triggers are reproducible manual samples, not a connected live helpdesk. n8n calls the Python endpoint; it does not directly hold the model credential or connect to a production shop. Zapier, Make and GuruSup are not used in this project.
-
-## AI and baseline modes
-
-| Mode | Behaviour |
-| --- | --- |
-| Offline baseline | Keyword rules; no model calls or provider account required |
-| Live AI | OpenAI Responses API with Structured Outputs; one call per new live ticket, except pre-model safety stops |
-
-Live mode loads `OPENAI_API_KEY` from the ignored local `.env.local` file or server environment. Existing environment values take precedence. `.env.example` is a template, not a credential. The verified model is `gpt-6-luna`, reasoning disabled, output capped at 400 tokens. See the [Structured Outputs documentation](https://developers.openai.com/api/docs/guides/structured-outputs).
-
-Only message text is sent to the model. References and supporting excerpts are checked against that message. A failed request or invalid extraction goes to human review. Model confidence is a routing heuristic, not a calibrated probability. Live calls incur provider usage fees; viewing the desk and running the baseline do not.
-
-## Decisions survive retries
-
-- Replaying the same ticket ID and content returns its stored outcome. Changed content under the same ID is rejected. Use a fresh ID after changing code or policy.
-- Queue events have stable IDs. Repeating the same event reuses it; conflicting content is rejected.
-- Operator decisions have revision numbers. An old browser view cannot silently overwrite a newer decision.
-- Exceptions cannot be approved as automatic drafts. Reviewing an exception requires a note with its next step.
-- The reference date is fixed at 22 October 2026 so the fictional date checks are reproducible.
-
-## Evidence
-
-| Check | Observed result |
-| --- | --- |
-| Automated tests | **39 passed**, covering policy, HTTP integrations, provider handling, configuration, review revisions and replay conflicts |
-| Original baseline cases | **14/14** expected routes |
-| Broader baseline set | **34/40** expected routes; inspect the six mismatches |
-| Live AI on the same authored set | **40/40** expected routes; **38** validated provider extractions and **2** pre-model stops |
-| Local n8n | Both routes executed; repeated request and dispatch replayed without new processing |
-| Operator desk | Draft editing/approval and exception review saved and retained after a browser reload |
-| GitHub Issues API | [Issue #1 created](https://github.com/rp-ceo/returns-workflow-lab/issues/1), then [reused on rerun](https://github.com/rp-ceo/returns-workflow-lab/actions/runs/39857793546) in offline mode |
+## Checks
 
 ```sh
 python3 -m unittest discover -s tests -v
+python3 run_demo.py
 python3 evaluate.py --mode demo
+python3 run_case.py --ticket DEMO-005 --mode demo
 ```
 
-[Live verification and limitations](docs/live-verification.md) separate model results, n8n execution and the GitHub write. The 40 cases are authored synthetic examples, including the original fixtures. They are not held-out customer data, production accuracy, time savings or an autonomous-resolution rate.
+Reports go to the ignored `runtime/reports/` directory. Each script accepts `--output PATH`. To save a model evaluation for the desk's **Verification** page, run `python3 evaluate.py --mode live`; this makes up to 40 paid calls. The 40 authored cases are examples, not a measure of production accuracy. The offline classifier does not match every expected route.
 
-The [latest workspace recheck](artifacts/workspace-verification.json) records 8 application-API checks, browser checks of editing/review/search/error recovery, and successful reruns of both local n8n workflows. Two new live model requests were checked; the original 40-case model evaluation was not repeated.
+Frontend tests run the interface in jsdom:
 
-## Separate GitHub review-task demo
+```sh
+npm ci --ignore-scripts
+npm test
+npm run format:check
+```
 
-Open **Actions → Run an operations scenario → Run workflow**, choose `DEMO-005` and mode `demo`. The manually triggered workflow uses the sandbox order service and creates or reuses a real GitHub issue on fictional data. It saves a JSON artifact.
+Python formatting uses `python3 -m pip install -r requirements-dev.txt`, then `python3 -m black --check .`. CI checks Python 3.9, 3.11 and 3.14, plus the frontend on Node 24. Pull requests run the checks; older runs are cancelled when a newer commit arrives.
 
-GitHub supplies a short-lived token with `contents: read` and `issues: write`. Only supplied scenario IDs and `example.com` tickets are allowed. For cloud mode `live`, the owner would need to configure an `OPENAI_API_KEY` repository secret; that combined cloud path has not been verified. The local model key is not published to GitHub.
+## Scope
 
-Issue deduplication uses a ticket marker and payload hash, with demo runs serialized. It is a bounded demonstration, not a transactional guarantee across independent workers or unlimited issue history. Unknown POST outcomes are not blindly retried.
+I use a fixed reference date of 22 October 2026 for repeatable return-window checks. Sender-email matching is a fixture check, not customer authentication. The override-phrase filter catches some suspicious messages; it is not comprehensive prompt-injection protection. Schema validation, order checks, fixed templates and operator approval remain in place even when a phrase is missed.
 
-## Read or demonstrate
+This is a local prototype without operator accounts or a production shop connection. I would add authentication, monitoring and real merchant policies before connecting it to customer systems.
 
-- [Five-minute demo](docs/demo-guide.md)
-- [Business case and pilot measurements](docs/business-case.md)
-- [Design choices and tool trade-offs](docs/architecture-decisions.md)
-- [Importable n8n workflows](automation/n8n)
+A separate, manually triggered GitHub Actions scenario can create or reuse an issue for a fictional review case. It needs `issues: write` and never sends customer messages. Live mode in Actions needs an `OPENAI_API_KEY` repository secret; local keys stay local.
 
-Key files: `workflow.py` (extraction/policy), `operations.py` (operator events), `shop_api.py` (order service), `app.py` (desk API), `web/` (interface), `evaluate.py` (routing comparison), and `github_queue.py` (external review tasks).
-
-This prototype has no production merchant connection, authenticated shopper identity, operator login, automatic refunds, calibrated confidence score or comprehensive prompt-injection protection. A production rollout needs real policies, authenticated access, operational monitoring and a measured pilot.
+[MIT licence](LICENSE) · [n8n workflows](automation/n8n)
