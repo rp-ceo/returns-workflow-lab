@@ -1,6 +1,6 @@
 {
   "id": "ReturnOpsLive001",
-  "name": "ReturnOps - AI request triage",
+  "name": "ReturnOps - request triage",
   "active": false,
   "nodes": [
     {
