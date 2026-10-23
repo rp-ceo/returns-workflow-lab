@@ -6,7 +6,7 @@ A customer asks to return an order. The system extracts what they need, fetches 
 
 All orders, customers and policies are fictional. This is an independent prototype, not a REVER integration.
 
-![Operations inbox with a value-threshold exception](docs/operations-desk.jpg)
+![Operations inbox with a value-threshold exception](docs/operations-workspace.jpg)
 
 ## What runs
 
@@ -20,7 +20,7 @@ All orders, customers and policies are fictional. This is an independent prototy
 | **Browser desk** | Searchable inbox, editable drafts, exception notes, activity history and evidence |
 | **GitHub Actions / Issues** | Automated checks and a separate, verified review-task integration |
 
-The model interprets the message. Code applies the policy. The response is a policy-based template that an operator can edit. No customer message, shipping label or refund is sent.
+The model interprets the message. Code applies the policy. The response is a policy-based template that an operator can edit. Unsaved draft and note edits are retained while switching cases; a reset control restores the saved version. Failed checks show their reason directly, and operator actions remain visible while reading the request. No customer message, shipping label or refund is sent.
 
 ## Run the desk
 
@@ -30,7 +30,7 @@ Python 3.9+; the Python application uses only the standard library.
 python3 launch_demo.py
 ```
 
-Open http://127.0.0.1:8765. Click **Load 14 baseline cases** to fill the inbox without an API key. Select a case to inspect its order, checks and proposed next step. Approve a draft or record what should happen to an exception; both actions persist after reload.
+Open http://127.0.0.1:8765. Click **Load sample queue** to fill the inbox without an API key. Select a case to inspect its order, checks and proposed next step. Approve a draft or record what should happen to an exception; both actions persist after reload.
 
 The launcher starts both the desk and the separate order HTTP service. `python3 app.py` also works, using local fixtures unless `ORDER_API_URL` is configured. Keep these development services on loopback.
 
@@ -43,7 +43,7 @@ Two importable workflows are included in [automation/n8n](automation/n8n):
 
 Both use real model extraction through the Python service. They were imported into local n8n 2.44.6 and executed successfully. Repeating the first workflow returned the saved result and queue receipt, without another model call. See the [execution evidence](artifacts/n8n-verification.json) and [setup instructions](automation/n8n/README.md).
 
-![Workflow map and saved n8n execution receipts in the desk](docs/automation-workflow.jpg)
+![Workflow map and saved n8n execution receipts in the desk](docs/workflow-overview.jpg)
 
 The triggers are reproducible manual samples, not a connected live helpdesk. n8n calls the Python endpoint; it does not directly hold the model credential or connect to a production shop. Zapier, Make and GuruSup are not used in this project.
 
@@ -84,6 +84,8 @@ python3 evaluate.py --mode demo
 ```
 
 [Live verification and limitations](docs/live-verification.md) separate model results, n8n execution and the GitHub write. The 40 cases are authored synthetic examples, including the original fixtures. They are not held-out customer data, production accuracy, time savings or an autonomous-resolution rate.
+
+The [latest workspace recheck](artifacts/workspace-verification.json) records 8 application-API checks, browser checks of editing/review/search/error recovery, and successful reruns of both local n8n workflows. Two new live model requests were checked; the original 40-case model evaluation was not repeated.
 
 ## Separate GitHub review-task demo
 
