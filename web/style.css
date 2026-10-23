@@ -999,6 +999,7 @@ pre {
 }
 .evidence-summary {
   display: flex;
+  flex-wrap: wrap;
   gap: 35px;
   margin: 26px 0;
   padding: 20px 0;

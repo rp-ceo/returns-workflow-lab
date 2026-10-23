@@ -190,6 +190,7 @@
                   </section>
                   <details class="activity-details">
                     <summary>Activity &amp; technical trace</summary>
+                    <div id="attempt-history" hidden></div>
                     <ol id="activity" class="activity"></ol>
                     <pre id="model-data"></pre>
                   </details>
@@ -215,7 +216,9 @@
                       ><button class="button primary" id="mark-reviewed">
                         Mark reviewed</button
                       ><button class="button" id="hold-case">
-                        Needs investigation
+                        Needs investigation</button
+                      ><button class="button" id="retry-processing" hidden>
+                        Retry processing
                       </button>
                     </div>
                     <span id="unsaved-label" hidden>Unsaved edits</span>

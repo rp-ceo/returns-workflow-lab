@@ -24,10 +24,15 @@ jobs:
       - run: python -m black --check .
       - run: python -m unittest discover -s tests -v
       - run: python run_demo.py
-      - run: python evaluate.py --mode demo
+      - run: python evaluate.py --mode demo --suite all
       - run: python run_case.py --ticket DEMO-005 --mode demo
       - name: Checks must not modify tracked files or leave untracked output
         run: test -z "$(git status --porcelain)"
+      - uses: actions/upload-artifact@v4
+        if: matrix.python == '3.11'
+        with:
+          name: offline-evaluation
+          path: runtime/reports/evaluation-demo-all.json
   frontend:
     runs-on: ubuntu-latest
     steps:

@@ -7,7 +7,13 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 
-from workflow import TicketConflict
+from workflow import (
+    TicketConflict,
+    process_ticket,
+    processing_failed,
+    ticket_key,
+    ticket_lock,
+)
 
 
 class Operations:
@@ -22,13 +28,7 @@ class Operations:
             )
 
     def _base(self, db, mode, ticket_id):
-        if (
-            mode not in ("demo", "live")
-            or not isinstance(ticket_id, str)
-            or not 1 <= len(ticket_id) <= 80
-        ):
-            raise ValueError("Invalid case identifier.")
-        key = mode + ":" + ticket_id
+        key = ticket_key(mode, ticket_id)
         row = db.execute("SELECT result FROM runs WHERE run_key=?", (key,)).fetchone()
         if not row:
             raise ValueError("Case not found. Process the request first.")
@@ -44,8 +44,17 @@ class Operations:
         ]
 
     def decorate(self, result):
+        attempt = result.get("attempt", 1)
+        key = ticket_key(result["mode"], result["ticket_id"])
         with closing(sqlite3.connect(self.store.path)) as db, db:
-            events = self._events(db, result["mode"] + ":" + result["ticket_id"])
+            events = self._events(db, key)
+            attempts = [
+                json.loads(row[0])
+                for row in db.execute(
+                    "SELECT result FROM run_attempts WHERE run_key=? ORDER BY attempt",
+                    (key,),
+                )
+            ]
         review = {
             "state": (
                 "needs_review" if result["route"] == "human_review" else "draft_ready"
@@ -56,16 +65,27 @@ class Operations:
         }
         dispatch = None
         for event in events:
+            if event.get("attempt", 1) != attempt:
+                continue
             if event["kind"] == "review":
                 review = event["review"]
-            else:
+            elif event["kind"] == "dispatch":
                 dispatch = event
-        return dict(result, activity=events, review=review, dispatch=dispatch)
+        return dict(
+            result,
+            attempt=attempt,
+            can_reprocess=processing_failed(result),
+            attempts=attempts or [dict(result, attempt=attempt)],
+            activity=events,
+            review=review,
+            dispatch=dispatch,
+        )
 
     def list_runs(self):
         return [self.decorate(result) for result in self.store.list_runs()]
 
-    def _record(self, payload, kind):
+    @staticmethod
+    def _identity(payload, kind):
         if not isinstance(payload, dict):
             raise ValueError("An action must be an object.")
         event_id = payload.get("event_id")
@@ -78,7 +98,37 @@ class Operations:
         digest = hashlib.sha256(
             json.dumps({"kind": kind, "payload": payload}, sort_keys=True).encode()
         ).hexdigest()
-        with closing(sqlite3.connect(self.store.path, timeout=30)) as db, db:
+        key = ticket_key(payload.get("mode"), payload.get("ticket_id"))
+        return event_id, digest, key
+
+    @staticmethod
+    def _check_attempt(payload, result):
+        expected = payload.get("expected_attempt", 1)
+        if type(expected) is not int or expected != result.get("attempt", 1):
+            raise TicketConflict(
+                "This case has a newer processing attempt. Refresh before acting."
+            )
+
+    @staticmethod
+    def _check_revision(payload, events, attempt):
+        revision = sum(
+            event["kind"] == "review" and event.get("attempt", 1) == attempt
+            for event in events
+        )
+        expected = payload.get("expected_revision")
+        if type(expected) is not int or expected != revision:
+            raise TicketConflict(
+                "Another decision changed this case. Refresh before reviewing it."
+            )
+        return revision
+
+    def _record(self, payload, kind):
+        event_id, digest, key = self._identity(payload, kind)
+        with (
+            ticket_lock(self.store.path, key),
+            closing(sqlite3.connect(self.store.path, timeout=30)) as db,
+            db,
+        ):
             db.execute("BEGIN IMMEDIATE")
             existing = db.execute(
                 "SELECT payload_hash,event FROM ops_events WHERE event_id=?",
@@ -91,12 +141,15 @@ class Operations:
                     )
                 return dict(json.loads(existing[1]), replayed=True)
             key, result = self._base(db, payload.get("mode"), payload.get("ticket_id"))
+            self._check_attempt(payload, result)
+            attempt = result.get("attempt", 1)
             now = datetime.now(timezone.utc).isoformat()
             event = {
                 "event_id": event_id,
                 "ticket_id": result["ticket_id"],
                 "mode": result["mode"],
                 "kind": kind,
+                "attempt": attempt,
                 "created_at": now,
             }
             if kind == "dispatch":
@@ -118,19 +171,7 @@ class Operations:
                     detail="n8n routed this saved outcome to " + target + ".",
                 )
             else:
-                previous = [
-                    item for item in self._events(db, key) if item["kind"] == "review"
-                ]
-                revision = len(previous)
-                expected = payload.get("expected_revision")
-                if (
-                    isinstance(expected, bool)
-                    or not isinstance(expected, int)
-                    or expected != revision
-                ):
-                    raise TicketConflict(
-                        "Another decision changed this case. Refresh before reviewing it."
-                    )
+                revision = self._check_revision(payload, self._events(db, key), attempt)
                 note = payload.get("note", "")
                 draft = payload.get("draft", result["draft"])
                 action = payload.get("action")
@@ -178,6 +219,102 @@ class Operations:
                 (event_id, key, digest, json.dumps(event), now),
             )
             return dict(event, replayed=False)
+
+    @staticmethod
+    def _retry_replay(db, event_id, digest):
+        row = db.execute(
+            "SELECT payload_hash,run_key,event FROM ops_events WHERE event_id=?",
+            (event_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        if row[0] != digest:
+            raise TicketConflict(
+                "This event ID was already used with different content."
+            )
+        event = json.loads(row[2])
+        result = db.execute(
+            "SELECT result FROM run_attempts WHERE run_key=? AND attempt=?",
+            (row[1], event["attempt"]),
+        ).fetchone()
+        return dict(json.loads(result[0]), replayed=True)
+
+    def reprocess(self, payload, **options):
+        event_id, digest, key = self._identity(payload, "reprocess")
+        fields = {
+            "event_id",
+            "ticket_id",
+            "mode",
+            "expected_attempt",
+            "expected_revision",
+            "note",
+        }
+        if set(payload) != fields:
+            raise ValueError(
+                "Retry needs identifiers, attempt, review revision and a note."
+            )
+        note = payload.get("note")
+        if not isinstance(note, str) or not 1 <= len(note.strip()) <= 1500:
+            raise ValueError(
+                "Explain why processing should be retried (1-1500 characters)."
+            )
+        with ticket_lock(self.store.path, key):
+            with closing(sqlite3.connect(self.store.path)) as db:
+                replay = self._retry_replay(db, event_id, digest)
+                if replay is not None:
+                    return replay
+                _, previous = self._base(db, payload["mode"], payload["ticket_id"])
+                self._check_attempt(payload, previous)
+                old_attempt = previous.get("attempt", 1)
+                self._check_revision(payload, self._events(db, key), old_attempt)
+                if not processing_failed(previous):
+                    raise ValueError(
+                        "Only a model or order-service failure can be retried."
+                    )
+
+            # No database lock is held while calling the model or order service.
+            result = process_ticket(previous["ticket"], previous["mode"], **options)
+            result["attempt"] = old_attempt + 1
+            now = datetime.now(timezone.utc).isoformat()
+            event = {
+                "event_id": event_id,
+                "ticket_id": previous["ticket_id"],
+                "mode": previous["mode"],
+                "kind": "reprocess",
+                "from_attempt": old_attempt,
+                "attempt": result["attempt"],
+                "created_at": now,
+                "detail": note.strip(),
+            }
+            with closing(sqlite3.connect(self.store.path, timeout=30)) as db, db:
+                db.execute("BEGIN IMMEDIATE")
+                replay = self._retry_replay(db, event_id, digest)
+                if replay is not None:
+                    return replay
+                _, current = self._base(db, payload["mode"], payload["ticket_id"])
+                if current != previous:
+                    raise TicketConflict(
+                        "Processing changed elsewhere. Refresh this case."
+                    )
+                # A second server process may have recorded a review during the call.
+                self._check_revision(payload, self._events(db, key), old_attempt)
+                db.execute(
+                    "INSERT OR IGNORE INTO run_attempts VALUES (?,?,?)",
+                    (key, old_attempt, json.dumps(dict(previous, attempt=old_attempt))),
+                )
+                db.execute(
+                    "INSERT INTO run_attempts VALUES (?,?,?)",
+                    (key, result["attempt"], json.dumps(result)),
+                )
+                db.execute(
+                    "UPDATE runs SET result=?,created_at=? WHERE run_key=?",
+                    (json.dumps(result), result["created_at"], key),
+                )
+                db.execute(
+                    "INSERT INTO ops_events VALUES (?,?,?,?,?)",
+                    (event_id, key, digest, json.dumps(event), now),
+                )
+            return dict(result, replayed=False)
 
     def review(self, payload):
         return self._record(payload, "review")
