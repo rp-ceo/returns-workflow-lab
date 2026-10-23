@@ -1,7 +1,7 @@
 # Project notes
 
-- [Operations desk](operations-desk.jpg): current inbox after real local AI and n8n runs, with fictional requests.
-- [Automation workflow](automation-workflow.jpg): the desk's workflow map and saved n8n receipts. This is not a screenshot of the n8n editor.
+- [Operations desk](operations-workspace.jpg): current inbox after real local AI and n8n runs, with fictional requests.
+- [Automation workflow](workflow-overview.jpg): the desk's workflow map and saved n8n receipts. This is not a screenshot of the n8n editor.
 - [Five-minute walkthrough](demo-guide.md)
 - [Verification evidence and limits](live-verification.md)
 - [Design decisions](architecture-decisions.md)
