@@ -1,3 +1,4 @@
+from helpers import sample
 import json
 import io
 import tempfile
@@ -6,12 +7,23 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from workflow import Store, TicketConflict, load_data, load_tickets, process_ticket, rule_extract
+from workflow import (
+    Store,
+    TicketConflict,
+    load_data,
+    load_tickets,
+    process_ticket,
+    rule_extract,
+)
 
 
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
-        self.ticket = {"ticket_id": "TEST-001", "sender_email": "alex@example.com", "message": "I would like to return ORD-1001."}
+        self.ticket = {
+            "ticket_id": "TEST-001",
+            "sender_email": "alex@example.com",
+            "message": "I would like to return ORD-1001.",
+        }
 
     def test_business_scenarios(self):
         for ticket in load_tickets():
@@ -21,25 +33,38 @@ class WorkflowTests(unittest.TestCase):
                 self.assertEqual(result["actions_executed"], [])
 
     def test_expired_return_explains_failed_window(self):
-        result = process_ticket(load_tickets()[2])
-        window = next(c for c in result["checks"] if c["label"] == "Within return window")
+        result = process_ticket(sample("DEMO-003"))
+        window = next(
+            c for c in result["checks"] if c["label"] == "Within return window"
+        )
         self.assertFalse(window["passed"])
         self.assertIn("51 days", window["detail"])
 
     def test_thirty_day_boundary_is_inclusive(self):
         policy, orders = load_data()
         orders["ORD-1001"]["delivered_at"] = "2026-09-22"
-        self.assertEqual(process_ticket(self.ticket, orders=orders)["route"], "return_instructions_draft")
+        self.assertEqual(
+            process_ticket(self.ticket, orders=orders)["route"],
+            "return_instructions_draft",
+        )
         orders["ORD-1001"]["delivered_at"] = "2026-09-21"
-        self.assertEqual(process_ticket(self.ticket, orders=orders)["route"], "human_review")
+        self.assertEqual(
+            process_ticket(self.ticket, orders=orders)["route"], "human_review"
+        )
 
     def test_future_delivery_date_is_not_eligible(self):
         _, orders = load_data()
         orders["ORD-1001"]["delivered_at"] = "2026-10-23"
-        self.assertEqual(process_ticket(self.ticket, orders=orders)["route"], "human_review")
+        self.assertEqual(
+            process_ticket(self.ticket, orders=orders)["route"], "human_review"
+        )
 
     def test_not_delivered_cannot_get_return_instructions(self):
-        ticket = {"ticket_id": "TRANSIT", "sender_email": "sam@example.com", "message": "I want to return ORD-1002."}
+        ticket = {
+            "ticket_id": "TRANSIT",
+            "sender_email": "sam@example.com",
+            "message": "I want to return ORD-1002.",
+        }
         self.assertEqual(process_ticket(ticket)["route"], "human_review")
 
     def test_identity_failure_does_not_disclose_order(self):
@@ -60,7 +85,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIsNone(result["extraction"])
 
     def test_model_cannot_skip_return_policy(self):
-        ticket = load_tickets()[4]
+        ticket = sample("DEMO-005")
         result = process_ticket(ticket, "live", extractor=rule_extract)
         self.assertEqual(result["route"], "human_review")
         self.assertTrue(any(not c["passed"] for c in result["checks"]))
@@ -68,32 +93,80 @@ class WorkflowTests(unittest.TestCase):
     def test_model_failure_falls_back_to_review(self):
         def broken(_):
             raise RuntimeError("Provider unavailable")
+
         result = process_ticket(self.ticket, "live", extractor=broken)
         self.assertEqual(result["route"], "human_review")
 
     def test_quota_error_is_identified_without_raw_provider_message(self):
-        error = urllib.error.HTTPError("https://api.openai.com/v1/responses", 429, "Too many requests", {},
-                                       io.BytesIO(json.dumps({"error": {"code": "insufficient_quota", "message": "sensitive diagnostic text"}}).encode()))
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder"}), patch("workflow.urllib.request.urlopen", side_effect=error):
+        error = urllib.error.HTTPError(
+            "https://api.openai.com/v1/responses",
+            429,
+            "Too many requests",
+            {},
+            io.BytesIO(
+                json.dumps(
+                    {
+                        "error": {
+                            "code": "insufficient_quota",
+                            "message": "sensitive diagnostic text",
+                        }
+                    }
+                ).encode()
+            ),
+        )
+        with (
+            patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder"}),
+            patch("workflow.urllib.request.urlopen", side_effect=error),
+        ):
             result = process_ticket(self.ticket, "live")
         self.assertIn("insufficient_quota", result["reason"])
         self.assertNotIn("sensitive diagnostic text", result["reason"])
         self.assertEqual(result["route"], "human_review")
 
     def test_unknown_provider_error_does_not_echo_arbitrary_error_code(self):
-        error = urllib.error.HTTPError("https://api.openai.com/v1/responses", 400, "Bad request", {},
-                                       io.BytesIO(json.dumps({"error": {"code": "do-not-echo-this", "message": "private text"}}).encode()))
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder"}), patch("workflow.urllib.request.urlopen", side_effect=error):
+        error = urllib.error.HTTPError(
+            "https://api.openai.com/v1/responses",
+            400,
+            "Bad request",
+            {},
+            io.BytesIO(
+                json.dumps(
+                    {"error": {"code": "do-not-echo-this", "message": "private text"}}
+                ).encode()
+            ),
+        )
+        with (
+            patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder"}),
+            patch("workflow.urllib.request.urlopen", side_effect=error),
+        ):
             result = process_ticket(self.ticket, "live")
         self.assertIn("unclassified", result["reason"])
         self.assertNotIn("do-not-echo", result["reason"])
 
     def test_completed_provider_payload_is_validated_and_policy_still_runs(self):
         extraction = rule_extract(self.ticket)
-        body = {"status": "completed", "usage": {"input_tokens": 200, "output_tokens": 50, "total_tokens": 250}, "output": [{"type": "message", "content": [
-            {"type": "output_text", "text": json.dumps(extraction)}]}]}
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder", "OPENAI_MODEL": "gpt-6-luna"}), \
-                patch("workflow.urllib.request.urlopen", return_value=io.BytesIO(json.dumps(body).encode())) as provider:
+        body = {
+            "status": "completed",
+            "usage": {"input_tokens": 200, "output_tokens": 50, "total_tokens": 250},
+            "output": [
+                {
+                    "type": "message",
+                    "content": [
+                        {"type": "output_text", "text": json.dumps(extraction)}
+                    ],
+                }
+            ],
+        }
+        with (
+            patch.dict(
+                "os.environ",
+                {"OPENAI_API_KEY": "sk-test-placeholder", "OPENAI_MODEL": "gpt-6-luna"},
+            ),
+            patch(
+                "workflow.urllib.request.urlopen",
+                return_value=io.BytesIO(json.dumps(body).encode()),
+            ) as provider,
+        ):
             result = process_ticket(self.ticket, "live")
         self.assertEqual(result["route"], "return_instructions_draft")
         self.assertTrue(result["checks"])
@@ -104,9 +177,18 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn(self.ticket["sender_email"], sent["input"])
 
     def test_incomplete_provider_response_never_becomes_a_draft(self):
-        body = {"status": "incomplete", "usage": {"input_tokens": 100, "output_tokens": 400, "total_tokens": 500}, "output": []}
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder"}), \
-                patch("workflow.urllib.request.urlopen", return_value=io.BytesIO(json.dumps(body).encode())):
+        body = {
+            "status": "incomplete",
+            "usage": {"input_tokens": 100, "output_tokens": 400, "total_tokens": 500},
+            "output": [],
+        }
+        with (
+            patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-placeholder"}),
+            patch(
+                "workflow.urllib.request.urlopen",
+                return_value=io.BytesIO(json.dumps(body).encode()),
+            ),
+        ):
             result = process_ticket(self.ticket, "live")
         self.assertEqual(result["route"], "human_review")
         self.assertIsNone(result["extraction"])
@@ -116,12 +198,23 @@ class WorkflowTests(unittest.TestCase):
     def test_invalid_scores_are_rejected(self):
         for score in (True, float("nan"), 2, -1):
             with self.subTest(score=score):
-                result = process_ticket(self.ticket, "live", extractor=lambda _, score=score: dict(rule_extract(self.ticket), confidence=score))
+                result = process_ticket(
+                    self.ticket,
+                    "live",
+                    extractor=lambda _, score=score: dict(
+                        rule_extract(self.ticket), confidence=score
+                    ),
+                )
                 self.assertEqual(result["route"], "human_review")
 
     def test_invented_evidence_is_rejected(self):
         extraction = dict(rule_extract(self.ticket), evidence="delivered yesterday")
-        self.assertEqual(process_ticket(self.ticket, "live", extractor=lambda _: extraction)["route"], "human_review")
+        self.assertEqual(
+            process_ticket(self.ticket, "live", extractor=lambda _: extraction)[
+                "route"
+            ],
+            "human_review",
+        )
 
     def test_duplicate_does_not_call_extractor_again(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -142,7 +235,12 @@ class WorkflowTests(unittest.TestCase):
                 store.process(dict(self.ticket, message="Where is ORD-1001?"))
 
     def test_bad_input_is_rejected(self):
-        for ticket in (None, {}, dict(self.ticket, message=""), dict(self.ticket, sender_email="not-an-email")):
+        for ticket in (
+            None,
+            {},
+            dict(self.ticket, message=""),
+            dict(self.ticket, sender_email="not-an-email"),
+        ):
             with self.subTest(ticket=ticket):
                 with self.assertRaises(ValueError):
                     process_ticket(ticket)

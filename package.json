@@ -1,0 +1,13 @@
+{
+  "name": "returnops",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "format": "prettier --write web .github package.json tests/*.test.js",
+    "format:check": "prettier --check web .github package.json tests/*.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0",
+    "prettier": "3.6.2"
+  }
+}

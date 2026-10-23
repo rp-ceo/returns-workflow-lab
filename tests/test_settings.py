@@ -12,8 +12,14 @@ class LocalSettingsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".env.local"
             marker = Path(directory) / "unexpected"
-            path.write_text('OPENAI_API_KEY=sk-test-local\nOPENAI_MODEL="model-local"\nUNRELATED=$(touch ' + str(marker) + ')\n')
-            with patch.dict(os.environ, {"OPENAI_MODEL": "model-environment"}, clear=True):
+            path.write_text(
+                'OPENAI_API_KEY=sk-test-local\nOPENAI_MODEL="model-local"\nUNRELATED=$(touch '
+                + str(marker)
+                + ")\n"
+            )
+            with patch.dict(
+                os.environ, {"OPENAI_MODEL": "model-environment"}, clear=True
+            ):
                 load_local_env(path)
                 self.assertEqual(os.environ["OPENAI_API_KEY"], "sk-test-local")
                 self.assertEqual(os.environ["OPENAI_MODEL"], "model-environment")
@@ -23,7 +29,7 @@ class LocalSettingsTests(unittest.TestCase):
     def test_invalid_key_message_does_not_reveal_value(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".env.local"
-            path.write_text('OPENAI_API_KEY=not-a-key-private-value\n')
+            path.write_text("OPENAI_API_KEY=not-a-key-private-value\n")
             with patch.dict(os.environ, {}, clear=True):
                 with self.assertRaises(ValueError) as failure:
                     load_local_env(path)
