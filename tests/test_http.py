@@ -165,6 +165,45 @@ class HttpTests(unittest.TestCase):
         self.app.live_available = True
         self.assertEqual(self.request("POST", "/api/demo", {"mode": "live"})[0], 400)
 
+    def test_reprocess_recovers_a_failed_call_and_keeps_attempt_history(self):
+        self.app.live_available = True
+        with patch.object(
+            self.app, "extractor", side_effect=RuntimeError("Unavailable")
+        ):
+            status, failed, _ = self.request(
+                "POST", "/api/process", {"mode": "live", "ticket": sample("DEMO-001")}
+            )
+        self.assertEqual(status, 200)
+        self.assertTrue(failed["can_reprocess"])
+        payload = {
+            "event_id": "http-reprocess-001",
+            "ticket_id": failed["ticket_id"],
+            "mode": "live",
+            "expected_attempt": 1,
+            "expected_revision": 0,
+            "note": "Provider recovered.",
+        }
+        self.app.live_available = False
+        self.assertEqual(self.request("POST", "/api/reprocess", payload)[0], 400)
+        self.app.live_available = True
+        with patch.object(self.app, "extractor", wraps=rule_extract) as extractor:
+            status, result, _ = self.request("POST", "/api/reprocess", payload)
+            self.assertEqual(status, 200)
+            self.assertEqual(result["attempt"], 2)
+            self.assertEqual(result["route"], "return_instructions_draft")
+            status, replay, _ = self.request("POST", "/api/reprocess", payload)
+            self.assertEqual(status, 200)
+            self.assertTrue(replay["replayed"])
+            self.assertEqual(extractor.call_count, 1)
+        _, state, _ = self.request("GET", "/api/state")
+        self.assertEqual(len(state["runs"][0]["attempts"]), 2)
+        self.assertEqual(state["runs"][0]["activity"][0]["kind"], "reprocess")
+        stale = dict(payload, event_id="http-reprocess-002")
+        self.assertEqual(self.request("POST", "/api/reprocess", stale)[0], 409)
+        self.assertEqual(
+            self.request("POST", "/api/reprocess", dict(payload, ticket={}))[0], 400
+        )
+
     def test_operator_decision_survives_reload_and_stale_revision_is_rejected(self):
         run = self.process_sample()
         payload = {

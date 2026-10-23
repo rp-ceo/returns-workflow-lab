@@ -3,6 +3,7 @@
 const byId = (id) => document.getElementById(id);
 const caseKey = (run) => `${run.mode}:${run.ticket_id}`;
 const edits = new Map();
+const retryRequests = new Map();
 let state = { runs: [], samples: [] };
 let selectedId = null;
 let filter = "all";
@@ -279,7 +280,7 @@ function renderDetail() {
   byId("case-state").textContent = stateLabel[status];
   byId("case-state").className = `pill ${statusTone(status)}`;
   byId("case-meta").textContent =
-    `${run.ticket.sender_email} · Processed ${processedAt(run.created_at)} Madrid`;
+    `${run.ticket.sender_email} · Attempt ${run.attempt || 1} · ${processedAt(run.created_at)} Madrid`;
   byId("next-action").textContent = nextStep(run);
   byId("decision-banner").className =
     `decision-banner${status === "needs_review" ? "" : " positive"}`;
@@ -332,8 +333,10 @@ function renderDetail() {
   byId("review-note").value = pending?.note ?? savedNote(run);
   byId("approve-draft").hidden = !run.draft || run.route === "human_review";
   byId("mark-reviewed").hidden = run.route !== "human_review";
-  byId("review-state-note").textContent =
-    status === "approved"
+  byId("retry-processing").hidden = !run.can_reprocess;
+  byId("review-state-note").textContent = run.can_reprocess
+    ? "After fixing the service problem, add a reason and retry. Previous attempts and decisions stay saved. A live retry may use API credit."
+    : status === "approved"
       ? "Approval recorded. Nothing has been sent."
       : status === "reviewed"
         ? "Next step recorded. Merchant actions happen outside this prototype."
@@ -341,13 +344,28 @@ function renderDetail() {
   updateEditLabel();
 
   byId("activity").replaceChildren();
+  byId("attempt-history").replaceChildren();
+  byId("attempt-history").hidden = (run.attempts || []).length < 2;
+  for (const attempt of run.attempts || []) {
+    const item = element("p");
+    item.append(
+      element(
+        "strong",
+        `Attempt ${attempt.attempt || 1} · ${processedAt(attempt.created_at)}`,
+      ),
+      element("span", ` — ${routeLabel[attempt.route]}. ${attempt.reason}`),
+    );
+    byId("attempt-history").append(item);
+  }
   const steps = [
     ...run.trace,
     ...(run.activity || []).map((event) => ({
       step:
-        event.kind === "dispatch"
-          ? "n8n queue hand-off"
-          : event.action.replaceAll("_", " "),
+        event.kind === "reprocess"
+          ? `Processing retried · attempt ${event.attempt}`
+          : event.kind === "dispatch"
+            ? "n8n queue hand-off"
+            : `${event.action.replaceAll("_", " ")} · attempt ${event.attempt || 1}`,
       detail: `${event.detail} · ${processedAt(event.created_at)}`,
     })),
   ];
@@ -385,6 +403,7 @@ function captureEdits() {
       draft,
       note,
       revision: edits.get(selectedId)?.revision ?? run.review?.revision ?? 0,
+      attempt: edits.get(selectedId)?.attempt ?? run.attempt ?? 1,
     });
   updateEditLabel();
 }
@@ -393,14 +412,26 @@ function renderEvidence() {
   byId("evaluation-model").textContent = evaluation?.model || "No saved run";
   byId("evaluation-summary").replaceChildren();
   if (evaluation) {
-    for (const [number, label] of [
+    const metrics = [
       [
         `${evaluation.route_matches} / ${evaluation.case_count}`,
         "Expected routes matched",
       ],
       [evaluation.validated_live_extractions, "Validated model extractions"],
       [evaluation.review_required_but_drafted, "Review cases given a draft"],
-    ]) {
+    ];
+    if (evaluation.category_case_count) {
+      metrics.push([
+        `${evaluation.category_matches} / ${evaluation.category_case_count}`,
+        "Labelled intents matched",
+      ]);
+    }
+    if (typeof evaluation.unnecessary_escalations === "number")
+      metrics.push([
+        evaluation.unnecessary_escalations,
+        "Unnecessary escalations",
+      ]);
+    for (const [number, label] of metrics) {
       const statistic = element("div");
       statistic.append(element("strong", number), element("small", label));
       byId("evaluation-summary").append(statistic);
@@ -410,16 +441,31 @@ function renderEvidence() {
   byId("evaluation-rows").replaceChildren();
   for (const item of evaluation?.cases || []) {
     const row = element("tr");
-    row.append(
-      element("td", item.id),
-      element("td", item.expected_route.replaceAll("_", " ")),
-      element("td", item.actual_route.replaceAll("_", " ")),
-    );
+    row.append(element("td", item.id));
+    for (const [category, route] of [
+      [item.expected_category, item.expected_route],
+      [item.actual_category || item.extraction?.category, item.actual_route],
+    ]) {
+      const cell = element("td");
+      cell.append(
+        element(
+          "strong",
+          category ? category.replaceAll("_", " ") : "Intent not labelled",
+        ),
+        element("p", route.replaceAll("_", " ")),
+      );
+      row.append(cell);
+    }
+    const mismatch = !item.matched || item.category_matched === false;
     const result = element("td");
     result.append(
       badge(
-        item.matched ? "Matched" : "Mismatch",
-        item.matched ? "teal" : "amber",
+        mismatch
+          ? "Mismatch"
+          : item.expected_category
+            ? "Matched"
+            : "Route matched",
+        mismatch ? "amber" : "teal",
       ),
     );
     row.append(result);
@@ -487,28 +533,46 @@ async function review(action) {
     return;
   }
   const id = selectedId;
+  const retry = action === "retry";
   const payload = {
-    event_id: crypto.randomUUID(),
     ticket_id: run.ticket_id,
     mode: run.mode,
-    action,
     note,
-    draft: byId("draft-text").value || null,
     expected_revision: edits.get(id)?.revision ?? run.review?.revision ?? 0,
+    expected_attempt: edits.get(id)?.attempt ?? run.attempt ?? 1,
   };
+  if (retry) {
+    const signature = JSON.stringify(payload);
+    const previous = retryRequests.get(id);
+    const eventId =
+      previous?.signature === signature
+        ? previous.eventId
+        : crypto.randomUUID();
+    retryRequests.set(id, { signature, eventId });
+    payload.event_id = eventId;
+  } else {
+    Object.assign(payload, {
+      event_id: crypto.randomUUID(),
+      action,
+      draft: byId("draft-text").value || null,
+    });
+  }
   reviewing = true;
   for (const control of document.querySelectorAll(
     ".review-actions button, #review-note, #draft-text",
   ))
     control.disabled = true;
   try {
-    await api("/api/review", payload);
+    await api(retry ? "/api/reprocess" : "/api/review", payload);
     edits.delete(id);
+    retryRequests.delete(id);
     await refresh();
     feedback(
-      action === "approve_draft"
-        ? "Draft approved and saved. No message sent."
-        : "Operator decision saved.",
+      retry
+        ? "Processing retried. Previous attempts and decisions are saved."
+        : action === "approve_draft"
+          ? "Draft approved and saved. No message sent."
+          : "Operator decision saved.",
     );
   } catch (error) {
     if (error.status === 409) await refresh();
@@ -549,6 +613,7 @@ byId("refresh").addEventListener("click", () =>
 byId("approve-draft").addEventListener("click", () => review("approve_draft"));
 byId("mark-reviewed").addEventListener("click", () => review("mark_reviewed"));
 byId("hold-case").addEventListener("click", () => review("hold"));
+byId("retry-processing").addEventListener("click", () => review("retry"));
 byId("new-request").addEventListener("click", () => {
   loadSample(byId("sample").value);
   byId("request-feedback").textContent = "";

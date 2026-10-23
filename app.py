@@ -46,13 +46,21 @@ class Application:
             return self.live_available
         return bool(os.environ.get("OPENAI_API_KEY"))
 
-    def process(self, raw_ticket, mode):
+    def processing_options(self, mode):
         options = {}
         if self.shop is not None:
             options["order_lookup"] = self.shop.get_order
         if mode == "live" and self.extractor is not None:
             options["extractor"] = self.extractor
-        return self.ops.decorate(self.store.process(raw_ticket, mode, **options))
+        return options
+
+    def process(self, raw_ticket, mode):
+        result = self.store.process(raw_ticket, mode, **self.processing_options(mode))
+        return self.ops.decorate(result)
+
+    def reprocess(self, payload, mode):
+        result = self.ops.reprocess(payload, **self.processing_options(mode))
+        return self.ops.decorate(result)
 
     def state(self):
         policy, orders = load_data()
@@ -145,7 +153,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(app.ops.review(payload))
             if route == "/api/dispatch":
                 return self.reply(app.ops.dispatch(payload))
-            if route not in ("/api/process", "/api/demo"):
+            if route not in ("/api/process", "/api/demo", "/api/reprocess"):
                 return self.reply({"error": "Not found"}, 404)
             mode = payload.get("mode", "demo")
             if mode not in ("demo", "live"):
@@ -156,6 +164,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
             if route == "/api/process":
                 return self.reply(app.process(payload.get("ticket"), mode))
+            if route == "/api/reprocess":
+                return self.reply(app.reprocess(payload, mode))
             if mode != "demo":
                 raise ValueError(
                     "Batch demo uses the offline classifier. Submit live tickets individually."

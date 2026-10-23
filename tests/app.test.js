@@ -23,6 +23,8 @@ function run(ticketId, route) {
     ticket: copy(ticket),
     mode: "demo",
     route,
+    attempt: 1,
+    can_reprocess: false,
     reason:
       route === "human_review"
         ? "Order value requires review."
@@ -69,6 +71,15 @@ async function desk(t, options = {}) {
     orchestration: null,
   };
   const requests = [];
+  const retryResults = new Map();
+  if (options.retryFailure) {
+    Object.assign(state.runs[0], {
+      reason: "Classification unavailable: Provider unavailable",
+      processing_error: "extraction",
+      can_reprocess: true,
+    });
+    state.runs[0].attempts = [copy(state.runs[0])];
+  }
   window.fetch = async (path, config = {}) => {
     const payload = config.body ? JSON.parse(config.body) : undefined;
     requests.push({ path, payload });
@@ -95,6 +106,42 @@ async function desk(t, options = {}) {
           note: payload.note,
         };
         result = { review: target.review };
+      }
+    } else if (path === "/api/reprocess") {
+      const target = state.runs.find(
+        (row) => row.ticket_id === payload.ticket_id,
+      );
+      if (!retryResults.has(payload.event_id)) {
+        const previous = copy(target);
+        Object.assign(target, {
+          attempt: 2,
+          can_reprocess: false,
+          processing_error: null,
+          route: "return_instructions_draft",
+          draft: "Recovered draft",
+          reason: "Checks passed.",
+          review: {
+            state: "draft_ready",
+            revision: 0,
+            draft: "Recovered draft",
+            note: "",
+          },
+          activity: [
+            {
+              kind: "reprocess",
+              attempt: 2,
+              detail: payload.note,
+              created_at: target.created_at,
+            },
+          ],
+        });
+        target.attempts = [previous, copy(target)];
+        retryResults.set(payload.event_id, copy(target));
+      }
+      result = retryResults.get(payload.event_id);
+      if (options.loseRetryResponse) {
+        options.loseRetryResponse = false;
+        throw new Error("Connection interrupted");
       }
     } else if (path === "/api/process") {
       status = options.processStatus || 200;
@@ -157,10 +204,64 @@ test("approval submits the edited draft and revision then displays the saved sta
   assert.equal(payload.draft, "Edited response");
   assert.equal(payload.note, "Order checked");
   assert.equal(payload.expected_revision, 0);
+  assert.equal(payload.expected_attempt, 1);
   assert.equal(payload.action, "approve_draft");
   assert.equal(app.byId("case-state").textContent, "Approved");
   assert.equal(app.byId("unsaved-label").hidden, true);
   assert.equal(app.byId("approve-draft").disabled, false);
+});
+
+test("retry needs a note and keeps the original failure visible after recovery", async (t) => {
+  const app = await desk(t, { retryFailure: true });
+  assert.equal(app.byId("retry-processing").hidden, false);
+  app.byId("retry-processing").click();
+  await flush();
+  assert.equal(
+    app.requests.filter((r) => r.path === "/api/reprocess").length,
+    0,
+  );
+  app.input("review-note", "Provider recovered.");
+  app.byId("retry-processing").click();
+  await flush();
+  const payload = app.requests.find((r) => r.path === "/api/reprocess").payload;
+  assert.equal(payload.expected_attempt, 1);
+  assert.equal(payload.expected_revision, 0);
+  assert.equal(payload.note, "Provider recovered.");
+  assert.equal("draft" in payload, false);
+  assert.equal(app.byId("retry-processing").hidden, true);
+  assert.match(app.byId("case-meta").textContent, /Attempt 2/);
+  assert.equal(app.byId("attempt-history").hidden, false);
+  assert.match(app.byId("attempt-history").textContent, /Provider unavailable/);
+  assert.match(app.byId("activity").textContent, /Processing retried/);
+});
+
+test("a lost retry response reuses its event ID instead of starting another attempt", async (t) => {
+  const app = await desk(t, { retryFailure: true, loseRetryResponse: true });
+  app.input("review-note", "Service restored.");
+  app.byId("retry-processing").click();
+  await flush();
+  assert.match(app.byId("feedback").textContent, /Connection interrupted/);
+  assert.equal(app.byId("retry-processing").disabled, false);
+  app.byId("retry-processing").click();
+  await flush();
+  const retries = app.requests.filter((r) => r.path === "/api/reprocess");
+  assert.equal(retries.length, 2);
+  assert.equal(retries[0].payload.event_id, retries[1].payload.event_id);
+  assert.equal(app.state.runs[0].attempt, 2);
+});
+
+test("edits from an earlier attempt keep their attempt number after refresh", async (t) => {
+  const app = await desk(t, { conflict: true });
+  app.select("DEMO-001");
+  app.input("draft-text", "Old attempt's edited draft");
+  app.state.runs.find((row) => row.ticket_id === "DEMO-001").attempt = 2;
+  app.byId("refresh").click();
+  await flush();
+  app.byId("approve-draft").click();
+  await flush();
+  const payload = app.requests.find((r) => r.path === "/api/review").payload;
+  assert.equal(payload.expected_attempt, 1);
+  assert.match(app.byId("feedback").textContent, /Reset edits/);
 });
 
 test("a stale revision preserves unsaved text until the operator resets it", async (t) => {
@@ -228,4 +329,39 @@ test("customer markup is displayed as text, and absent reports have an empty sta
   assert.equal(app.byId("original-message").textContent, message);
   assert.equal(app.byId("original-message").querySelector("img"), null);
   assert.equal(app.byId("evaluation-empty").hidden, false);
+});
+
+test("a matching review route still shows a mismatched intent in evaluation", async (t) => {
+  const app = await desk(t);
+  app.state.evaluation = {
+    model: "test-provider",
+    case_count: 1,
+    route_matches: 1,
+    category_case_count: 1,
+    category_matches: 0,
+    validated_live_extractions: 1,
+    review_required_but_drafted: 0,
+    unnecessary_escalations: 0,
+    cases: [
+      {
+        id: "METRIC-001",
+        expected_category: "payment_problem",
+        actual_category: "damaged_item",
+        category_matched: false,
+        expected_route: "human_review",
+        actual_route: "human_review",
+        matched: true,
+      },
+    ],
+  };
+  app.byId("refresh").click();
+  await flush();
+  assert.match(
+    app.byId("evaluation-summary").textContent,
+    /Labelled intents matched/,
+  );
+  const row = app.byId("evaluation-rows").textContent;
+  assert.match(row, /payment problem/);
+  assert.match(row, /damaged item/);
+  assert.match(row, /Mismatch/);
 });

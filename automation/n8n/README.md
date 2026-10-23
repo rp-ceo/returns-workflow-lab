@@ -36,3 +36,5 @@ Both workflows call http://127.0.0.1:8765. If n8n runs in a container, change th
 ## Replays
 
 Repeat an execution to reuse the saved ticket and dispatch receipt. Reusing an ID with changed content is rejected. Use a new ticket ID after changing the message or policy. A queue receipt is a local record, not an email, refund or helpdesk integration.
+
+After a service failure, use **Retry processing** in the desk with a note. The next n8n execution reads the saved attempt and records a receipt for that attempt. Dispatch IDs include the attempt number, and `expected_attempt` prevents an older execution from routing a newer result. Re-import these workflow files if you previously imported a version without attempt numbers.

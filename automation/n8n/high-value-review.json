@@ -96,7 +96,7 @@
         "url": "http://127.0.0.1:8765/api/dispatch",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({event_id: \"n8n-exceptions-\" + $json.mode + \"-\" + $json.ticket_id, ticket_id: $json.ticket_id, mode: $json.mode, source: \"n8n\", destination: \"exceptions\"}) }}",
+        "jsonBody": "={{ JSON.stringify({event_id: \"n8n-exceptions-\" + $json.mode + \"-\" + $json.ticket_id + \"-attempt-\" + ($json.attempt || 1), expected_attempt: ($json.attempt || 1), ticket_id: $json.ticket_id, mode: $json.mode, source: \"n8n\", destination: \"exceptions\"}) }}",
         "options": {
           "timeout": 10000
         }
@@ -116,7 +116,7 @@
         "url": "http://127.0.0.1:8765/api/dispatch",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({event_id: \"n8n-draft_approval-\" + $json.mode + \"-\" + $json.ticket_id, ticket_id: $json.ticket_id, mode: $json.mode, source: \"n8n\", destination: \"draft_approval\"}) }}",
+        "jsonBody": "={{ JSON.stringify({event_id: \"n8n-draft_approval-\" + $json.mode + \"-\" + $json.ticket_id + \"-attempt-\" + ($json.attempt || 1), expected_attempt: ($json.attempt || 1), ticket_id: $json.ticket_id, mode: $json.mode, source: \"n8n\", destination: \"draft_approval\"}) }}",
         "options": {
           "timeout": 10000
         }
