@@ -6,7 +6,7 @@ A support request needs more than a plausible reply. The operator needs the righ
 
 ## 2. Open the inbox
 
-Run `python3 launch_demo.py`, open http://127.0.0.1:8765 and click **Load 14 baseline cases**. Select the EUR 79 return and inspect the customer message, order and eight checks. This mode uses keyword rules, not AI.
+Run `python3 launch_demo.py`, open http://127.0.0.1:8765 and click **Load sample queue**. Select the EUR 79 return and inspect the customer message, order and eight checks. This mode uses keyword rules, not AI.
 
 Click **New request**, choose the same scenario, use a fresh ticket ID and select **Live AI** if a funded backend key is configured. Only this explicit submission calls the provider.
 
@@ -18,13 +18,13 @@ Select the EUR 299 order. It exceeds the fictional EUR 150 threshold. There is n
 
 ## 4. Show actual orchestration
 
-Open **Automation** for the workflow map and saved receipts. The diagram is the application's explanation of the imported workflow, not a screenshot of the n8n editor.
+Open **Workflow** for the workflow map and saved receipts. The diagram is the application's explanation of the imported workflow, not a screenshot of the n8n editor.
 
 Follow [the n8n instructions](../automation/n8n/README.md) to execute the two workflows. n8n calls Python, branches on the saved outcome and records the queue hand-off. Repeat the first workflow: it should reuse both the processed case and dispatch event without another model call.
 
 ## 5. Discuss a result and a limit
 
-Open **Checks & evidence** or `artifacts/evaluation-live.json`. The actual live run matched 40/40 expected routes on authored synthetic examples. The baseline matched 34/40, with failures on language it did not understand. These results do not establish production accuracy or time saved.
+Open **Verification** or `artifacts/evaluation-live.json`. The actual live run matched 40/40 expected routes on authored synthetic examples. The baseline matched 34/40, with failures on language it did not understand. These results do not establish production accuracy or time saved.
 
 The separate GitHub Actions demo creates or reuses a real review issue in offline mode. That external write and the live AI+n8n paths were tested separately.
 
